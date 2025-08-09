@@ -1,4 +1,4 @@
-RANK_ORDER = {r: i for i, r in enumerate('23456789TJQKA')}
+RANK_ORDER = {r: i for i, r in enumerate('AKQJT98765432')}
 SUIT_ORDER = {'s': 0, 'h': 1, 'd': 2, 'c':3}
 SUITS = list(SUIT_ORDER.keys())
 RANKS = list(RANK_ORDER.keys())

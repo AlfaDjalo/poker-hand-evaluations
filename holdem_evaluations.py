@@ -1,8 +1,8 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import json
-import os
+# import json
+# import os
 
 from itertools import combinations, product, permutations, count
 from phevaluator import evaluate_cards
@@ -12,13 +12,14 @@ from card import Card, card_sort_key, RANK_ORDER, SUIT_ORDER, SUITS, RANKS
 from deck import Deck
 from hand import Hand
 from board import Board
-from db import DB
+from db import DB, open_db
 
 # SUITS = ['s', 'h', 'd', 'c']
 # RANKS = []
-BOARD_PATTERNS = [[5, 0, 0, 0]]
-# BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0], [3, 2, 0, 0], [3, 1, 1, 0], [2, 1, 1, 1]]
+# BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0]]
+BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0], [3, 2, 0, 0], [3, 1, 1, 0], [2, 1, 1, 1]]
 
+CONFIG_FILE = "config.json"
 
 def generate_boards_by_suit_distribution(deck, suit_counts):
     """
@@ -252,9 +253,6 @@ def plot_rank_distribution(distribution, bins=20, title=None):
         bins: the number of bins in the histogram.
         title: the title to be printed on the chart.
     """
-
-
-
     ranks = [rank * 100 for value, rank in distribution if rank is not None]
     # ranks = [rank for _, result in distribution if result is not None and result[1] is not None for rank in [result[1]]]
 
@@ -273,36 +271,39 @@ def plot_rank_distribution(distribution, bins=20, title=None):
 
     return
 
-def run_evaluation(hand_id_map):
+def run_evaluation(db, hand_id_map, board_id_map):
 
     start_time = time.time()
+    BATCH_SIZE = 100000000  # Tune this value for your system
 
-    my_deck = Deck()
-    deck_cards = my_deck.get_cards()
+    all_evaluations_to_insert = []
+    eval_time = 0
+    insert_time = 0
 
-    # hands = [Hand(*sorted((c1, c2), key = card_sort_key)) for c1, c2 in combinations(deck_cards, 2)]
+    for board_str, board_id in board_id_map.items():
+        start_eval_time = time.time()
+        hand_values = evaluate_board(board_str, hand_id_map)
+        end_eval_time = time.time()
+        eval_time += end_eval_time - start_eval_time
 
-    hands = hand_id_map
-    # hands = get_hands()
+        evaluations_for_board = [(board_id, hand_id, hand_value) 
+                                 for hand_id, hand_value in hand_values]
+        all_evaluations_to_insert.extend(evaluations_for_board)
 
-    for pattern_num, pattern in enumerate(BOARD_PATTERNS):
-        boards = generate_boards_by_suit_distribution(deck_cards, pattern)
-        print(f"{len(boards)} boards match the pattern")
-        hand_values = [None] * len(boards)
-
-        for board_num, board_str in enumerate(boards):
-            hand_values[board_num] = evaluate_board(board_str, hands)
-
-        print(len(hand_values[board_num]))
-        print(len(hand_values))
+    start_insert_time = time.time()
+    db.bulk_insert_evaluations(all_evaluations_to_insert)
+    end_insert_time = time.time()
+    insert_time = end_insert_time - start_insert_time
 
     end_time = time.time()
 
     time_taken = end_time - start_time
     print(f"Time taken: {time_taken}")
-    print(f"Average time per board: {time_taken / len(hand_values)}")
+    print(f"Eval Time: {eval_time}")
+    print(f"Insert Time: {insert_time}")
+    print(f"Average time per board: {time_taken / len(board_id_map)}")
 
-    return hand_values
+    return None  # or return stats if you want
 
 
 
@@ -326,13 +327,7 @@ def run_distribution(hand_values, method='min', return_percentiles=True):
 
 def test_database():
     # Initialize DB connection
-    db = DB(
-        dbname="postgres",
-        user="postgres",
-        password="**********",  # Be sure to protect this in production
-        host="localhost",
-        port="5432"
-    )
+    db = open_db()
 
     try:
         # Initialize tables
@@ -365,107 +360,38 @@ def test_database():
         db.close()
 
 
-def test_bulk_load_hands():
-    # Initialize DB connection
-    db = DB(
-        dbname="postgres",
-        user="postgres",
-        password="**********",  # Be sure to protect this in production
-        host="localhost",
-        port="5432"
-    )
-
-    my_deck = Deck()
-    deck_cards = my_deck.get_cards()
-    hands = [Hand(*sorted((c1, c2), key = card_sort_key)) for c1, c2 in combinations(deck_cards, 2)]
-    data = [(hand.to_str(),) for hand in hands]  # or hand.to_str() if defined
-    print(len(data))
-    db.select_hands()
-    db.truncate_table("hands")
-    db.select_hands()
-    hand_id_map = db.bulk_insert_hands(data)
-    db.select_hands()
-    # print(hand_id_map)
-
-    db.close()
-
-    return hand_id_map
-
-
-def test_bulk_load_boards():
-    # Initialize DB connection
-    db = DB(
-        dbname="postgres",
-        user="postgres",
-        password="***********",  # Be sure to protect this in production
-        host="localhost",
-        port="5432"
-    )
-
-    my_deck = Deck()
-    deck_cards = my_deck.get_cards()
-
-    for pattern_num, pattern in enumerate(BOARD_PATTERNS):
-        boards = generate_boards_by_suit_distribution(deck_cards, pattern)
-    print(boards[0])
-    # data = [(board.to_str(),) for board in boards]  # or hand.to_str() if defined
-    print(len(boards))
-    db.select_boards()
-    db.truncate_table("boards")
-    db.select_boards()
-    board_id_map = db.bulk_insert_boards(boards, pattern_num)
-    db.select_boards()
-    # print(hand_id_map)
-
-    db.close()
-
-    return board_id_map
-
-
-def load_db_config(config_path="db_config.json"):
-    """
-    Loads DB config from a JSON file.
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Database config file '{config_path}' not found.")
-    with open(config_path, "r") as f:
-        return json.load(f)
-
-def open_db():
-    """
-    Opens database object.
-
-    Returns:
-        Database
-    """
-    config = load_db_config()
-    db = DB(
-        dbname=config["dbname"],
-        user=config["user"],
-        password=config["password"],
-        host=config.get("host", "localhost"),
-        port=config.get("port", 5432)
-    )
-    return db
-
 def main():
 
-    config = load_db_config()
-    db = DB(
-        dbname=config["dbname"],
-        user=config["user"],
-        password=config["password"],
-        host=config.get("host", "localhost"),
-        port=config.get("port", 5432)
-    )
+    # Initialize DB connection
+    db = open_db()
+
+    # db.drop_hands_table()
+
+    # db.init_schema()
 
     # test_database()
     # hand_id_map = test_bulk_load_hands()
-    # hand_id_map = db.get_hand_ids()
+    hand_id_map = db.get_hand_ids()
+    print(len(hand_id_map))
 
-    board_id_map = test_bulk_load_boards()
-    board_id_map = db.get_board_ids()
+    # board_id_map = test_bulk_load_boards()
+    board_id_map = db.get_board_ids("0")
+    print(len(board_id_map))
+    # print(list[board_id_map.items()][0])
     
+    db.remove_indices_from_evaluations()
+
+    try:
+        all_hand_values = run_evaluation(db, hand_id_map, board_id_map)
+    except Exception as e:
+        print(f"An error occurred during evaluation: {e}")
+        # You might want to log the error or perform a rollback here
+    finally:
+        db.replace_indices_on_evaluations()
+
+
+    # print(len(all_hand_values[:10]))
+
     # hand_combos = generate_hands_by_suit_distribution(BOARD_PATTERNS[0])
 
     # print(hand_combos)
