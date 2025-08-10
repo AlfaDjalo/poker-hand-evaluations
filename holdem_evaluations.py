@@ -19,7 +19,7 @@ from db import DB, open_db
 # BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0]]
 BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0], [3, 2, 0, 0], [3, 1, 1, 0], [2, 1, 1, 1]]
 
-CONFIG_FILE = "config.json"
+# CONFIG_FILE = "config.json"
 
 def generate_boards_by_suit_distribution(deck, suit_counts):
     """
@@ -124,38 +124,34 @@ def evaluate_board(board_str, hand_id_map):
     Returns:
         List of tuples: (hand_id, hand_value)
     """
-    board_cards = [Card(board_str[i:i+2]) for i in range(0, 10, 2)]
+    # Use string slicing instead of Card objects
+    board_cards = [board_str[i:i+2] for i in range(0, 10, 2)]
     board_set = set(board_cards)
     hand_values = []
-
     for hand_str, hand_id in hand_id_map.items():
-        card1 = Card(hand_str[:2])
-        card2 = Card(hand_str[2:])
-
+        card1 = hand_str[:2]
+        card2 = hand_str[2:]
         if card1 in board_set or card2 in board_set:
             hand_values.append((hand_id, float('inf')))
         else:
-            full_hand = (card1, card2) + tuple(board_cards)
+            full_hand = [card1, card2] + board_cards
             hand_value = evaluate_hand(full_hand)
             hand_values.append((hand_id, hand_value))
-
     return hand_values
 
 
 def evaluate_hand(cards):
     """
     Evaluates the best holdem style hand on a seven card board + hand.
-    
     Arguments:
-        cards: a seven card tuple of cards representing the board + hand to be evaluated.
-
+        cards: a list of 7 card strings (e.g. ["As", "Ks", ...])
     Returns:
         the value of the best hand.
     """
 
     evaluate = evaluate_cards
-    full_hand = [card.card_string() for card in cards]
-    return evaluate(*full_hand)
+    # cards is already a list of strings
+    return evaluate(*cards)
 
 
 def rank_hands_on_all_boards(hand_values, method="min", return_percentiles=True):
@@ -179,49 +175,99 @@ def rank_hands_on_all_boards(hand_values, method="min", return_percentiles=True)
     return ranked_hand_values
 
 
-def rank_hands_for_board(hand_values, method="min", return_percentiles=True):
+# def rank_hands_for_board(hand_values, method="min", return_percentiles=True):
+
+#     hand_values.sort(key=lambda x: x[1])
+#     valid_hands = [(i, hand, value) for i, (hand, value) in enumerate(hand_values) if value != float('inf')]
+#     values = [value for _, _, value in valid_hands]
+
+#     value_to_indices = defaultdict(list)
+#     for idx, (i, hand, val) in enumerate(valid_hands):
+#         value_to_indices[val].append(i)
+
+#     sorted_values = sorted(value_to_indices.keys())
+#     hand_rankings = [None] * len(hand_values)
+
+#     if method == "dense":
+#         num_for_percentiles = len(sorted_values)
+#     else:
+#         num_for_percentiles = len(valid_hands)
+
+#     pos = 0
+#     for rank_index, value in enumerate(sorted_values):
+#         indices = value_to_indices[value]
+#         match method:
+#             case "min":
+#                 rank = pos
+#             case "max":
+#                 rank = pos + len(indices) - 1
+#             case "average":
+#                 rank = pos + (len(indices) - 1) / 2
+#             case "dense":
+#                 rank = rank_index
+#             case _:
+#                 raise ValueError("Unknown ranking method.")
+
+#         for i in indices:
+#             h, v = hand_values[i]
+#             p = rank / (num_for_percentiles - 1) if return_percentiles else rank
+#             hand_rankings[i] = (h, v, p)
+
+#         pos += len(indices)
+
+#     for i, (h, v) in enumerate(hand_values):
+#         if v == float('inf'):
+#             hand_rankings[i] = (h, v, None)
+
+#     return hand_rankings
+
+
+def rank_hands_for_board(hand_values):
+    # No, you do not need to enumerate hand_values if hand_id is already unique.
+    # Just use hand_id directly and keep track of the index for assignment.
 
     hand_values.sort(key=lambda x: x[1])
-    valid_hands = [(i, hand, value) for i, (hand, value) in enumerate(hand_values) if value != float('inf')]
-    values = [value for _, _, value in valid_hands]
-
+    # Build a list of valid hand indices for assignment
+    valid_indices = [i for i, (hand_id, value) in enumerate(hand_values) if value != float('inf')]
+    valid_hands = [(hand_id, value) for hand_id, value in hand_values if value != float('inf')]
+    # print(f"Valid indices: {len(valid_indices)}")
+    # print(f"Valid hands: {len(valid_hands)}")
     value_to_indices = defaultdict(list)
-    for idx, (i, hand, val) in enumerate(valid_hands):
-        value_to_indices[val].append(i)
+    for idx, (hand_id, value) in zip(valid_indices, valid_hands):
+        value_to_indices[value].append(idx)
 
     sorted_values = sorted(value_to_indices.keys())
     hand_rankings = [None] * len(hand_values)
 
-    if method == "dense":
-        num_for_percentiles = len(sorted_values)
-    else:
-        num_for_percentiles = len(valid_hands)
+    num_unique_values = len(sorted_values)
+    num_valid_hands = len(valid_hands)
+
+    denom_non_dense = num_valid_hands - 1 if num_valid_hands > 1 else 1
+    denom_dense = num_unique_values - 1 if num_unique_values > 1 else 1
 
     pos = 0
     for rank_index, value in enumerate(sorted_values):
         indices = value_to_indices[value]
-        match method:
-            case "min":
-                rank = pos
-            case "max":
-                rank = pos + len(indices) - 1
-            case "average":
-                rank = pos + (len(indices) - 1) / 2
-            case "dense":
-                rank = rank_index
-            case _:
-                raise ValueError("Unknown ranking method.")
 
-        for i in indices:
-            h, v = hand_values[i]
-            p = rank / (num_for_percentiles - 1) if return_percentiles else rank
-            hand_rankings[i] = (h, v, p)
+        min_rank_val = pos
+        max_rank_val = pos + len(indices) - 1
+        avg_rank_val = pos + (len(indices) - 1) / 2
+        dense_rank_val = rank_index
+
+        min_percentile = min_rank_val / denom_non_dense
+        max_percentile = max_rank_val / denom_non_dense
+        avg_percentile = avg_rank_val / denom_non_dense
+        dense_percentile = dense_rank_val / denom_dense
+
+        for original_index in indices:
+            h, v = hand_values[original_index]
+            hand_rankings[original_index] = (h, v, min_percentile, max_percentile, avg_percentile, dense_percentile)
 
         pos += len(indices)
 
     for i, (h, v) in enumerate(hand_values):
         if v == float('inf'):
-            hand_rankings[i] = (h, v, None)
+            hand_rankings[i] = (h, v, None, None, None, None)
 
     return hand_rankings
 
@@ -283,11 +329,18 @@ def run_evaluation(db, hand_id_map, board_id_map):
     for board_str, board_id in board_id_map.items():
         start_eval_time = time.time()
         hand_values = evaluate_board(board_str, hand_id_map)
+        # print(f"Hand values in run_evaluation: {len(hand_values)}")
+        hand_rankings = rank_hands_for_board(hand_values)
+        # print(f"Hand rankings in run_evaluation: {len(hand_rankings)}")
         end_eval_time = time.time()
         eval_time += end_eval_time - start_eval_time
 
-        evaluations_for_board = [(board_id, hand_id, hand_value) 
-                                 for hand_id, hand_value in hand_values]
+        evaluations_for_board = [
+            (board_id, hand_id, hand_value, min_rank, max_rank, avg_rank, dense_rank)
+            for hand_id, hand_value, min_rank, max_rank, avg_rank, dense_rank in hand_rankings
+            if hand_value != float('inf')
+        ]
+
         all_evaluations_to_insert.extend(evaluations_for_board)
 
     start_insert_time = time.time()

@@ -160,26 +160,41 @@ class DB:
 
 
     def bulk_insert_evaluations(self, data):
-        # data: list of tuples [(board_id, hand_id, hand_value), ...]
+        # data: list of tuples [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
         # Use PostgreSQL's COPY for fast bulk insert
-
 
         if not data:
             return
 
-        # Prepare a CSV-like in-memory buffer
         buffer = io.StringIO()
         writer = csv.writer(buffer, delimiter='\t', lineterminator='\n')
         writer.writerows(data)
-        # for row in data:
-        #     buffer.write(f"{row[0]}\t{row[1]}\t{row[2]}\n")
         buffer.seek(0)
 
-        # Use copy_from for fast bulk insert
+        # The error is likely because the number of columns in your COPY statement
+        # does not match the number of columns in your data tuples.
+        # You are passing 7 columns in 'columns=...' but if your data only has 3 columns,
+        # or if your data has None for some columns, COPY will fail.
+
+        # Make sure:
+        # - The number of columns in 'columns=...' matches the number of fields in each tuple in 'data'
+        # - None values are handled (COPY expects empty strings for NULLs in text format)
+
+        # Example: If your data is [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
+        # and some of the rank_* values are None, convert them to empty strings:
+        processed_data = [
+            ["" if v is None else v for v in row]
+            for row in data
+        ]
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter='\t', lineterminator='\n')
+        writer.writerows(processed_data)
+        buffer.seek(0)
+
         self.cursor.copy_from(
             buffer,
             'evaluations',
-            columns=('board_id', 'hand_id', 'hand_value'),
+            columns=('board_id', 'hand_id', 'hand_value', 'rank_min', 'rank_max', 'rank_avg', 'rank_dense'),
             sep='\t'
         )
         print(f"✅ COPY inserted {len(data)} evaluations")
