@@ -131,9 +131,7 @@ def evaluate_board(board_str, hand_id_map):
     for hand_str, hand_id in hand_id_map.items():
         card1 = hand_str[:2]
         card2 = hand_str[2:]
-        if card1 in board_set or card2 in board_set:
-            hand_values.append((hand_id, float('inf')))
-        else:
+        if card1 not in board_set and card2 not in board_set:
             full_hand = [card1, card2] + board_cards
             hand_value = evaluate_hand(full_hand)
             hand_values.append((hand_id, hand_value))
@@ -223,26 +221,33 @@ def rank_hands_on_all_boards(hand_values, method="min", return_percentiles=True)
 
 
 def rank_hands_for_board(hand_values):
-    # No, you do not need to enumerate hand_values if hand_id is already unique.
-    # Just use hand_id directly and keep track of the index for assignment.
+    """
+    Function to calculated rankings for each hand on a given board.
+    
+    Args:
+        hand_values: List of tuples of (hand _id, value)
+
+    Returns:
+        List of tuples of (hand_id, value, rank_min, rank_max, rank_avg, rank_dense)
+    """
 
     hand_values.sort(key=lambda x: x[1])
     # Build a list of valid hand indices for assignment
-    valid_indices = [i for i, (hand_id, value) in enumerate(hand_values) if value != float('inf')]
-    valid_hands = [(hand_id, value) for hand_id, value in hand_values if value != float('inf')]
+    # valid_indices = [i for i, (hand_id, value) in enumerate(hand_values) if value != float('inf')]
+    # valid_hands = [(hand_id, value) for hand_id, value in hand_values if value != float('inf')]
     # print(f"Valid indices: {len(valid_indices)}")
     # print(f"Valid hands: {len(valid_hands)}")
     value_to_indices = defaultdict(list)
-    for idx, (hand_id, value) in zip(valid_indices, valid_hands):
+    for idx, (hand_id, value) in enumerate(hand_values): # zip(valid_indices, valid_hands):
         value_to_indices[value].append(idx)
 
     sorted_values = sorted(value_to_indices.keys())
     hand_rankings = [None] * len(hand_values)
 
     num_unique_values = len(sorted_values)
-    num_valid_hands = len(valid_hands)
+    num_total_hands = len(hand_values)
 
-    denom_non_dense = num_valid_hands - 1 if num_valid_hands > 1 else 1
+    denom_non_dense = num_total_hands - 1 if num_total_hands > 1 else 1
     denom_dense = num_unique_values - 1 if num_unique_values > 1 else 1
 
     pos = 0
@@ -265,9 +270,9 @@ def rank_hands_for_board(hand_values):
 
         pos += len(indices)
 
-    for i, (h, v) in enumerate(hand_values):
-        if v == float('inf'):
-            hand_rankings[i] = (h, v, None, None, None, None)
+    # for i, (h, v) in enumerate(hand_values):
+    #     if v == float('inf'):
+    #         hand_rankings[i] = (h, v, None, None, None, None)
 
     return hand_rankings
 
@@ -338,7 +343,7 @@ def run_evaluation(db, hand_id_map, board_id_map):
         evaluations_for_board = [
             (board_id, hand_id, hand_value, min_rank, max_rank, avg_rank, dense_rank)
             for hand_id, hand_value, min_rank, max_rank, avg_rank, dense_rank in hand_rankings
-            if hand_value != float('inf')
+            # if hand_value != float('inf')
         ]
 
         all_evaluations_to_insert.extend(evaluations_for_board)
@@ -424,23 +429,29 @@ def main():
 
     # test_database()
     # hand_id_map = test_bulk_load_hands()
-    hand_id_map = db.get_hand_ids()
-    print(len(hand_id_map))
-
-    # board_id_map = test_bulk_load_boards()
-    board_id_map = db.get_board_ids("0")
-    print(len(board_id_map))
-    # print(list[board_id_map.items()][0])
+    # hand_id_map = db.get_hand_ids()
+    # print(len(hand_id_map))
     
-    db.remove_indices_from_evaluations()
+    # # db.remove_indices_from_evaluations()
 
-    try:
-        all_hand_values = run_evaluation(db, hand_id_map, board_id_map)
-    except Exception as e:
-        print(f"An error occurred during evaluation: {e}")
-        # You might want to log the error or perform a rollback here
-    finally:
-        db.replace_indices_on_evaluations()
+    # print(f"Running board pattern {4}")
+    # board_id_map = db.get_board_ids(str(4))
+    # print(len(board_id_map))
+    # all_hand_values = run_evaluation(db, hand_id_map, board_id_map)
+
+    # try:
+    #     for i in range(5):
+    #         print(f"Running board pattern {i}")
+    #         board_id_map = db.get_board_ids(str(i))
+    #         print(len(board_id_map))
+    #         all_hand_values = run_evaluation(db, hand_id_map, board_id_map)
+    # except Exception as e:
+    #         import traceback
+    #         print(f"An error occurred during evaluation: {e}")
+    #         traceback.print_exc()
+    #         # You might want to log the error or perform a rollback here
+
+    # db.replace_indices_on_evaluations()
 
 
     # print(len(all_hand_values[:10]))
@@ -453,6 +464,8 @@ def main():
     # distribution = run_distribution(hand_values, method='min', return_percentiles=True)
 
     # plot_rank_distribution(distribution, bins=20, title="8s8c Hand Strength Across Boards - Best Ranking")
+
+    db.close()
 
     return
 

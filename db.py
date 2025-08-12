@@ -9,18 +9,21 @@ CONFIG_FILE = "config.json"
 
 class DB:
     def __init__(self, dbname, user, password, host="localhost", port=5432):
-        # Connection management
-        self.conn = psycopg2.connect(
-            dbname = dbname,
-            user = user,
-            password = password,
-            host = host,
-            port = port
-        )
-        self.conn.autocommit = True
-        self.cursor = self.conn.cursor()
-        print("✅ Connected to PostgreSQL")
-
+        try:
+            # Connection management
+            self.conn = psycopg2.connect(
+                dbname = dbname,
+                user = user,
+                password = password,
+                host = host,
+                port = port
+            )
+            self.conn.autocommit = True
+            self.cursor = self.conn.cursor()
+            print("✅ Connected to PostgreSQL")
+        except Exception as e:
+            print("❌ Failed to connect to PostgreSQL:", e)
+            raise
         return
     
 
@@ -159,45 +162,32 @@ class DB:
         return board_id_map    
 
 
-    def bulk_insert_evaluations(self, data):
+    def bulk_insert_evaluations(self, data, chunk_size=20000000):
         # data: list of tuples [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
         # Use PostgreSQL's COPY for fast bulk insert
 
         if not data:
             return
 
-        buffer = io.StringIO()
-        writer = csv.writer(buffer, delimiter='\t', lineterminator='\n')
-        writer.writerows(data)
-        buffer.seek(0)
+        total = len(data)
+        for i in range(0, total, chunk_size):
+            chunk = data[i:i+chunk_size]
+            processed_data = [
+                ["" if v is None else v for v in row]
+                for row in chunk
+            ]
+            buffer = io.StringIO()
+            writer = csv.writer(buffer, delimiter='\t', lineterminator='\n')
+            writer.writerows(processed_data)
+            buffer.seek(0)
 
-        # The error is likely because the number of columns in your COPY statement
-        # does not match the number of columns in your data tuples.
-        # You are passing 7 columns in 'columns=...' but if your data only has 3 columns,
-        # or if your data has None for some columns, COPY will fail.
-
-        # Make sure:
-        # - The number of columns in 'columns=...' matches the number of fields in each tuple in 'data'
-        # - None values are handled (COPY expects empty strings for NULLs in text format)
-
-        # Example: If your data is [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
-        # and some of the rank_* values are None, convert them to empty strings:
-        processed_data = [
-            ["" if v is None else v for v in row]
-            for row in data
-        ]
-        buffer = io.StringIO()
-        writer = csv.writer(buffer, delimiter='\t', lineterminator='\n')
-        writer.writerows(processed_data)
-        buffer.seek(0)
-
-        self.cursor.copy_from(
-            buffer,
-            'evaluations',
-            columns=('board_id', 'hand_id', 'hand_value', 'rank_min', 'rank_max', 'rank_avg', 'rank_dense'),
-            sep='\t'
-        )
-        print(f"✅ COPY inserted {len(data)} evaluations")
+            self.cursor.copy_from(
+                buffer,
+                'evaluations',
+                columns=('board_id', 'hand_id', 'hand_value', 'rank_min', 'rank_max', 'rank_avg', 'rank_dense'),
+                sep='\t'
+            )
+            print(f"✅ COPY inserted {len(chunk)} evaluations (rows {i+1}-{min(i+chunk_size, total)})")
         return
 
 
@@ -297,6 +287,76 @@ class DB:
 
         print(f"✅ Returned {len(rows)} evaluations")
         return rows
+
+    def get_evaluations_for_hand(self, hand_id):
+        self.cursor.execute(
+            "SELECT * FROM evaluations WHERE hand_id = %s;",
+            (hand_id,)
+        )
+    
+        rows = self.cursor.fetchall()
+    
+        # # Create mapping from board string to board_id
+        # board_id_map = {board_str: board_id for board_id, board_str in rows}
+
+        print(f"✅ Returned {len(rows)} evaluations")
+        return rows
+
+
+    def get_evaluations_count_for_hand(self, hand_id):
+        # self.cursor.execute(
+        #     "SELECT * FROM evaluations WHERE ;"
+        # )
+        self.cursor.execute("SELECT COUNT(*) FROM evaluations WHERE hand_id = %s;",
+                            (hand_id,))
+    
+        (count,) = self.cursor.fetchone()
+        # rows = self.cursor.fetchall()
+    
+        # # Create mapping from board string to board_id
+        # board_id_map = {board_str: board_id for board_id, board_str in rows}
+
+        print(f"✅ Table has {count:,} rows for hand_id={hand_id}.")
+        return count
+
+
+    def get_evaluations_for_suitedness(self, hand_str):
+        query = """
+            SELECT e.*
+            FROM evaluations e
+            JOIN hands h1 ON e.hand_id = h1.hand_id
+            WHERE h1.suitedness = %s;
+        """
+        self.cursor.execute(query, (hand_str,))
+        rows = self.cursor.fetchall()
+
+        print(f"✅ Returned {len(rows)} evaluations for suitedness of '{hand_str}'")
+        return rows
+
+
+    def get_evaluations_for_hand_class(self, suitedness):
+        # self.cursor.execute(
+        #     "SELECT * FROM evaluations WHERE ;"
+        # )
+        self.cursor.execute("SELECT * FROM evaluations WHERE suitedness = %s;",
+                            (suitedness,))
+    
+        rows = self.cursor.fetchall()
+        # rows = self.cursor.fetchall()
+    
+        # # Create mapping from board string to board_id
+        # board_id_map = {board_str: board_id for board_id, board_str in rows}
+
+        print(f"✅ Returned {len(rows)} evaluations")
+        return rows
+
+
+    def get_evaluations_count(self):
+        self.cursor.execute("SELECT COUNT(*) FROM evaluations;")
+        (count,) = self.cursor.fetchone()
+        print(f"✅ Table has {count:,} rows")
+        return count
+
 
     def remove_indices_from_evaluations(self):
         self.cursor.execute("ALTER TABLE evaluations DROP CONSTRAINT evaluations_pkey;")
