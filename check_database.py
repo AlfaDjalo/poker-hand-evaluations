@@ -3,6 +3,8 @@ import time
 import matplotlib.pyplot as plt
 import numpy as np
 
+PATTERN_COUNTS = [4, 12, 12, 12, 4, 12]
+
 def check_hand_id_map(db):
     """
     Helper function to test hand_id_map.
@@ -298,6 +300,8 @@ def plot_rank_distribution_multi2(db, hand_strs):
         col_names = [desc[0] for desc in db.cursor.description]
         rank_min_idx = col_names.index("rank_min")
         rank_max_idx = col_names.index("rank_max")
+        suit_multiplier_idx = col_names.index("suit_pattern")
+        # print(f"Suit_multiplier_idx {suit_multiplier_idx}")
 
         # Bin counts for this hand
         bin_counts = np.zeros(num_bins)
@@ -305,11 +309,13 @@ def plot_rank_distribution_multi2(db, hand_strs):
         for row in rows:
             rmin = row[rank_min_idx]
             rmax = row[rank_max_idx]
+            suit_multiplier = PATTERN_COUNTS[int(row[suit_multiplier_idx])]
+            # print(f"Suit_multiplier {suit_multiplier}")
 
             # Handle zero-width ranges
             if rmax == rmin:
                 bin_idx = min(int(rmin * num_bins), num_bins - 1)
-                bin_counts[bin_idx] += 1
+                bin_counts[bin_idx] += suit_multiplier
                 continue
 
             total_width = rmax - rmin
@@ -323,11 +329,17 @@ def plot_rank_distribution_multi2(db, hand_strs):
                 overlap_end = min(bin_end, rmax)
                 overlap_width = max(0, overlap_end - overlap_start)
                 if overlap_width > 0:
-                    bin_counts[b] += overlap_width / total_width
+                    bin_counts[b] += suit_multiplier * overlap_width / total_width
+            # print(f"Total hands for {suit_multiplier} = {sum(bin_counts)}")
+            
+        num_rows = len(rows)
+        print(f"Total hands for {hand_str} = {sum(bin_counts)}")
+        bin_counts_normalized = bin_counts / num_rows
 
         # Plot this hand's histogram
-        ax.bar(bin_edges[:-1] * 100, bin_counts, width=1.0, edgecolor="black", align="edge")
-        ax.set_ylabel("Weighted Freq")
+        ax.bar(bin_edges[:-1] * 100, bin_counts_normalized, width=1.0, edgecolor="black", align="edge")
+        # ax.bar(bin_edges[:-1] * 100, bin_counts, width=1.0, edgecolor="black", align="edge")
+        ax.set_ylabel("Weighted Freq (normalized)")
         ax.set_title(f"Rank distribution for {hand_str}")
         ax.set_xlim(0, 100)
         ax.grid(axis='y', linestyle='--', alpha=0.6)
@@ -335,6 +347,13 @@ def plot_rank_distribution_multi2(db, hand_strs):
     axes[-1].set_xlabel("Percentile (%)")
     plt.tight_layout()
     plt.show()
+
+
+def check_suit_pattern_counts(db):
+    rows = db.get_evaluations_for_suitedness(hand_str)
+    col_names = [desc[0] for desc in db.cursor.description]
+    suit_multiplier = int(col_names.index("suit_pattern"))
+
 
 
 
@@ -347,9 +366,10 @@ def main():
     # check_board_id_map(db)
     # check_evaluations(db)
     # check_evaluations_for_hand(db, "AhKd")
+    # check_evaluations_for_hand(db, "AhKd")
     # plot_chart_for_hand(db, "7h2c", "rank_min")
     # plot_rank_distribution(db, "7h7c")
-    plot_rank_distribution_multi2(db, ["AA", "KK", "AKs", "AKo"])
+    plot_rank_distribution_multi2(db, ["AQo", "JTs", "99"])
     # Close the DB connection
     db.close()
 

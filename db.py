@@ -26,14 +26,14 @@ class DB:
             raise
         return
     
-
+    # Methods to implement schema
     def init_schema(self):
         # Schema Initialization
         self.cursor.execute("""
                     CREATE TABLE IF NOT EXISTS boards (
                     board_id SERIAL PRIMARY KEY,
                     board_str TEXT UNIQUE NOT NULL,
-                    suit_pattern TEXT
+                    suit_pattern INT
                     );
                     """)
 
@@ -62,8 +62,47 @@ class DB:
 
         return
     
+    def remove_indices_from_evaluations(self):
+        """
+        Function to remove indices from evaluations table.
+        Required to be able to add rows to the table.
+        """
+        self.cursor.execute("ALTER TABLE evaluations DROP CONSTRAINT evaluations_pkey;")
+        self.conn.commit()
+        print("✅ Primary key removed from evaluations table.")
 
-    # Insertion Methods
+    def replace_indices_on_evaluations(self):
+        """
+        Function to recreate indices for evaluations table.
+        Required once rows have been added to the table.
+        """
+        self.cursor.execute("ALTER TABLE evaluations ADD PRIMARY KEY (board_id, hand_id);")
+        self.conn.commit()
+        print("✅ Primary key added to evaluations table.")
+
+    # Reset tables
+    def clear_table(self, table_name):
+        if table_name not in {"boards", "hands", "evaluations"}:
+            raise ValueError("Invalid table name")
+
+        self.cursor.execute(f"DELETE FROM {table_name};")
+        print(f"🧹 Cleared table: {table_name}")
+
+    def truncate_table(self, table_name):
+        if table_name not in {"boards", "hands", "evaluations"}:
+            raise ValueError("Invalid table name")
+
+        self.cursor.execute(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE;")
+        print(f"🧹 Truncated table: {table_name}")
+
+    def drop_table(self, table):
+        """
+        Drops table if it exists.
+        """
+        self.cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE;")
+        print(f"🗑️ Dropped table: {table}")
+
+    # Methods to populate tables
     def insert_board(self, board_str):
         self.cursor.execute("INSERT INTO boards (board_str) VALUES (%s);", (board_str,))
         print("📥 Inserted board data")
@@ -84,34 +123,8 @@ class DB:
 
 
     def bulk_insert_hands(self, data):
-        query = """
-            INSERT INTO hands (hand_str, suitedness)
-            VALUES %s
-            ON CONFLICT (hand_str) DO NOTHING
-            RETURNING hand_id, hand_str;
-        """
 
-        # data_with_suitedness = [(hand, create_suitedness(hand)) for hand in data]
-
-        # execute_values(self.cursor, query, data_with_suitedness)
-    
-        # # After insertion, fetch all hand_strs to get their IDs
-        # all_hand_strs = [item[0] for item in data]
-        # self.cursor.execute(
-        #     "SELECT hand_id, hand_str FROM hands WHERE hand_str = ANY(%s);",
-        #     (all_hand_strs,)
-        # )
-    
-        # rows = self.cursor.fetchall()
-    
-        # # Create mapping from hand string to hand_id
-        # hand_id_map = {hand_str: hand_id for hand_id, hand_str in rows}
-
-        # print(f"✅ Inserted {len(hand_id_map)} new hands")
-        # return hand_id_map
-
-        # Create the data in the correct format for execute_values
-        data_with_suitedness = [(hand[0], get_suitedness(hand[0])) for hand in data]
+        data_with_suitedness = [(hand, get_suitedness(hand)) for hand in data]
 
         query = """
             INSERT INTO hands (hand_str, suitedness)
@@ -133,8 +146,6 @@ class DB:
     def bulk_insert_boards(self, data, suit_pattern):
         # data: list of tuples [(board_str,), ...]
         # board_pattern: string or None
-
-        # The column in your schema is 'suit_pattern', not 'board_pattern'
         query = """
             INSERT INTO boards (board_str, suit_pattern)
             VALUES %s
@@ -164,7 +175,6 @@ class DB:
 
     def bulk_insert_evaluations(self, data, chunk_size=20000000):
         # data: list of tuples [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
-        # Use PostgreSQL's COPY for fast bulk insert
 
         if not data:
             return
@@ -191,38 +201,8 @@ class DB:
         return
 
 
-    # Reset tables
-    def clear_table(self, table_name):
-        if table_name not in {"boards", "hands", "evaluations"}:
-            raise ValueError("Invalid table name")
-
-        self.cursor.execute(f"DELETE FROM {table_name};")
-        print(f"🧹 Cleared table: {table_name}")
-
-    def truncate_table(self, table_name):
-        if table_name not in {"boards", "hands", "evaluations"}:
-            raise ValueError("Invalid table name")
-
-        self.cursor.execute(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE;")
-        print(f"🧹 Truncated table: {table_name}")
-
-
-    def drop_hands_table(self):
-        """
-        Drops the hands table if it exists.
-        """
-        self.cursor.execute("DROP TABLE IF EXISTS hands CASCADE;")
-        print("🗑️ Dropped table: hands")
-
 
     # Query / Utility Methods
-    def select_query(self):
-        self.cursor.execute("SELECT * FROM evaluations;")
-        rows = self.cursor.fetchall()
-        print("📤 Retrieved data:")
-        for row in rows:
-            print(row)
-
     def select_hands(self):
         self.cursor.execute("SELECT * FROM hands LIMIT 10;")
         rows = self.cursor.fetchall()
@@ -256,18 +236,23 @@ class DB:
 
     def get_board_ids(self, suit_pattern=None):    
         # After insertion, fetch all board_strs to get their IDs
+        print(suit_pattern)
+        print(str(suit_pattern))
+        
         if suit_pattern is not None:
+            print("Suit pattern")
             self.cursor.execute(
                 "SELECT board_id, board_str FROM boards WHERE suit_pattern = %s;",
-                (str(suit_pattern),)
+                (suit_pattern,)
             )
         else:
+            print("No suit pattern")
             self.cursor.execute(
                 "SELECT board_id, board_str FROM boards;"
             )
     
         rows = self.cursor.fetchall()
-    
+        print(len(rows))
         # Create mapping from board string to board_id
         board_id_map = {board_str: board_id for board_id, board_str in rows}
 
@@ -319,35 +304,19 @@ class DB:
         print(f"✅ Table has {count:,} rows for hand_id={hand_id}.")
         return count
 
-
     def get_evaluations_for_suitedness(self, hand_str):
         query = """
-            SELECT e.*
+            SELECT e.*, b.suit_pattern
             FROM evaluations e
             JOIN hands h1 ON e.hand_id = h1.hand_id
+            JOIN boards b ON e.board_id = b.board_id
             WHERE h1.suitedness = %s;
-        """
+        """        
+
         self.cursor.execute(query, (hand_str,))
         rows = self.cursor.fetchall()
 
         print(f"✅ Returned {len(rows)} evaluations for suitedness of '{hand_str}'")
-        return rows
-
-
-    def get_evaluations_for_hand_class(self, suitedness):
-        # self.cursor.execute(
-        #     "SELECT * FROM evaluations WHERE ;"
-        # )
-        self.cursor.execute("SELECT * FROM evaluations WHERE suitedness = %s;",
-                            (suitedness,))
-    
-        rows = self.cursor.fetchall()
-        # rows = self.cursor.fetchall()
-    
-        # # Create mapping from board string to board_id
-        # board_id_map = {board_str: board_id for board_id, board_str in rows}
-
-        print(f"✅ Returned {len(rows)} evaluations")
         return rows
 
 
@@ -357,17 +326,7 @@ class DB:
         print(f"✅ Table has {count:,} rows")
         return count
 
-
-    def remove_indices_from_evaluations(self):
-        self.cursor.execute("ALTER TABLE evaluations DROP CONSTRAINT evaluations_pkey;")
-        self.conn.commit()
-        print("✅ Primary key removed from evaluations table.")
-
-    def replace_indices_on_evaluations(self):
-        self.cursor.execute("ALTER TABLE evaluations ADD PRIMARY KEY (board_id, hand_id);")
-        self.conn.commit()
-        print("✅ Primary key added to evaluations table.")
-        
+    
     def close(self):
         if self.cursor:
             self.cursor.close()
@@ -375,6 +334,8 @@ class DB:
             self.conn.close()
             print("🔌 Connection closed")
 
+
+# Helper functions. (Not in class)
 def get_suitedness(hand_str:str) -> str:
     """
     Helper function to convert a two-card hand string to a simple suitedness classification.
@@ -417,6 +378,12 @@ def open_db():
 def load_db_config(config_path="config.json"):
     """
     Loads DB config from a JSON file.
+
+    Arguments:
+        config_path: location of config file.
+
+    Returns:
+        Dictionary of config elements loaded from json file.
     """
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Database config file '{config_path}' not found.")

@@ -17,7 +17,7 @@ from db import DB, open_db
 # SUITS = ['s', 'h', 'd', 'c']
 # RANKS = []
 # BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0]]
-BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0], [3, 2, 0, 0], [3, 1, 1, 0], [2, 1, 1, 1]]
+BOARD_PATTERNS = [[5, 0, 0, 0], [4, 1, 0, 0], [3, 2, 0, 0], [3, 1, 1, 0], [2, 1, 1, 1], [2, 2, 1, 0]]
 
 # CONFIG_FILE = "config.json"
 
@@ -418,26 +418,43 @@ def test_database():
         db.close()
 
 
+def recreate_board_table(db):
+    my_deck = Deck()
+    deck_cards = my_deck.get_cards()
+
+    db.truncate_table("boards")
+    
+    for pattern_num, pattern in enumerate(BOARD_PATTERNS):
+        boards = generate_boards_by_suit_distribution(deck_cards, pattern)
+        print(boards[0])
+        # data = [(board.to_str(),) for board in boards]  # or hand.to_str() if defined
+        print(len(boards))
+        board_id_map = db.bulk_insert_boards(boards, pattern_num)
+
+    db.select_boards()
+
+
 def main():
 
     # Initialize DB connection
     db = open_db()
 
+    # recreate_board_table(db)
     # db.drop_hands_table()
 
     # db.init_schema()
 
     # test_database()
     # hand_id_map = test_bulk_load_hands()
-    # hand_id_map = db.get_hand_ids()
-    # print(len(hand_id_map))
+    hand_id_map = db.get_hand_ids()
+    print(len(hand_id_map))
     
-    # # db.remove_indices_from_evaluations()
+    # db.remove_indices_from_evaluations()
 
-    # print(f"Running board pattern {4}")
-    # board_id_map = db.get_board_ids(str(4))
-    # print(len(board_id_map))
-    # all_hand_values = run_evaluation(db, hand_id_map, board_id_map)
+    print(f"Running board pattern {5}")
+    board_id_map = db.get_board_ids(str(5))
+    print(len(board_id_map))
+    all_hand_values = run_evaluation(db, hand_id_map, board_id_map)
 
     # try:
     #     for i in range(5):
