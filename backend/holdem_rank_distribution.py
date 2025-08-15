@@ -207,10 +207,10 @@ def main():
     # Initialize DB connection
     db = open_db()
 
-    create_rank_chart_data(db)
+    # create_rank_chart_data(db)
     # plot_rank_distribution(db, "32o")
     # plot_rank_distribution_multi(db, ["AQo"])
-    # plot_rank_distribution_multi(db, ["AQo", "JTs", "99"])
+    plot_rank_distribution_multi(db, ["AQo", "JTs", "99"])
 
     # Close the DB connection
     db.close()
