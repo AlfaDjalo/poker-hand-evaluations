@@ -105,21 +105,6 @@ body {
   cursor: not-allowed;
 }
 
-/* Chart Image Styles */
-.chart-image-container {
-  width: 100%;
-  height: 200px;
-  display: flex;
-  flex-direction: column;
-}
-
-.chart-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: 4px;
-}
-
 /* Compare Grid */
 .compare-grid {
   display: grid;
