@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/AlfaDjalo/poker-hand-evaluations/static/css/main.d27c52c7.css",
-    "main.js": "/AlfaDjalo/poker-hand-evaluations/static/js/main.ddeccd71.js",
+    "main.js": "/AlfaDjalo/poker-hand-evaluations/static/js/main.b2d8c425.js",
     "index.html": "/AlfaDjalo/poker-hand-evaluations/index.html",
     "main.d27c52c7.css.map": "/AlfaDjalo/poker-hand-evaluations/static/css/main.d27c52c7.css.map",
-    "main.ddeccd71.js.map": "/AlfaDjalo/poker-hand-evaluations/static/js/main.ddeccd71.js.map"
+    "main.b2d8c425.js.map": "/AlfaDjalo/poker-hand-evaluations/static/js/main.b2d8c425.js.map"
   },
   "entrypoints": [
     "static/css/main.d27c52c7.css",
-    "static/js/main.ddeccd71.js"
+    "static/js/main.b2d8c425.js"
   ]
 }
