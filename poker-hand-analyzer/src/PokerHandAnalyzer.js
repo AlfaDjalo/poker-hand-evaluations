@@ -45,7 +45,8 @@ const PokerHandAnalyzer = () => {
     const loadData = async () => {
       try {
         setDataError(null);
-        const response = await fetch('/charts/chart_data.json');
+        const response = await fetch(`${process.env.PUBLIC_URL}/charts/chart_data.json`);
+        // const response = await fetch('/charts/chart_data.json');
         if (!response.ok) {
           throw new Error(`Failed to load chart data: ${response.status}`);
         }
@@ -186,8 +187,6 @@ const PokerHandAnalyzer = () => {
       );
     }
 
-    console.log(chartData)
-
     const renderBarChart = (hand, idx) => {
       return (
         <ResponsiveContainer width="100%" height={200}>
@@ -251,7 +250,7 @@ const PokerHandAnalyzer = () => {
       <>
         {hands.length === 1 ? (
           <div className="flex flex-col h-full">
-            <div className="h-1/2 p-4">
+            <div className="h-half p-4">
               <h3 className="text-lg font-bold text-center mb-2">{hands[0]}</h3>
               {renderBarChart(hands[0], 0)}
             </div>
