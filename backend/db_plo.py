@@ -58,6 +58,16 @@ class DB_PLO:
                     );
                     """)
         
+        self.cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS plo_evaluations_bm (
+                        hand_mask BIGINT,
+                        board_mask BIGINT,
+                        high_value INT NOT NULL,
+                        low_value INT NOT NULL,
+                        PRIMARY KEY (hand_mask, board_mask)
+                    );
+                    """)
+        
         print("🛠️ Created PLO tables")
 
         return
@@ -82,14 +92,14 @@ class DB_PLO:
 
     # Reset tables
     def clear_table(self, table_name):
-        if table_name not in {"plo_boards", "plo_hands", "plo_evaluations"}:
+        if table_name not in {"plo_boards", "plo_hands", "plo_evaluations", "plo_evaluations_bm"}:
             raise ValueError("Invalid table name")
 
         self.cursor.execute(f"DELETE FROM {table_name};")
         print(f"🧹 Cleared table: {table_name}")
 
     def truncate_table(self, table_name):
-        if table_name not in {"plo_boards", "plo_hands", "plo_evaluations"}:
+        if table_name not in {"plo_boards", "plo_hands", "plo_evaluations", "plo_evaluations_bm"}:
             raise ValueError("Invalid table name")
 
         self.cursor.execute(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE;")
@@ -99,7 +109,7 @@ class DB_PLO:
         """
         Drops table if it exists.
         """
-        if table_name not in {"plo_boards", "plo_hands", "plo_evaluations"}:
+        if table_name not in {"plo_boards", "plo_hands", "plo_evaluations", "plo_evaluations_bm"}:
             raise ValueError("Invalid table name")
 
         self.cursor.execute(f"DROP TABLE IF EXISTS {table_name} CASCADE;")
@@ -116,9 +126,9 @@ class DB_PLO:
         print("📥 Inserted hand data")
         return
 
-    def insert_evaluation(self, board_id, hand_id, hand_value, rank_dense):
+    def insert_evaluation(self, board_id, hand_id, high_value, low_value):
         self.cursor.execute("""
-            INSERT INTO plo_evaluations (board_id, hand_id, hand_value, rank_dense)
+            INSERT INTO plo_evaluations (board_id, hand_id, high_value, low_value)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (board_id, hand_id) DO NOTHING;
         """, (board_id, hand_id, hand_value, rank_dense))
@@ -192,7 +202,7 @@ class DB_PLO:
         return board_id_map
     
 
-    def bulk_insert_evaluations(self, data, chunk_size=20000000):
+    def bulk_insert_evaluations(self, data, chunk_size=5000000):
         # data: list of tuples [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
 
         if not data:
@@ -212,11 +222,11 @@ class DB_PLO:
 
             self.cursor.copy_from(
                 buffer,
-                'plo_evaluations',
-                columns=('board_id', 'hand_id', 'hand_value', 'rank_dense'),
+                'plo_evaluations_bm',
+                columns=('board_mask', 'hand_mask', 'high_value', 'low_value'),
                 sep='\t'
             )
-            print(f"✅ COPY inserted {len(chunk)} plo_evaluations (rows {i+1}-{min(i+chunk_size, total)})")
+            print(f"✅ COPY inserted {len(chunk)} plo_evaluations_bm (rows {i+1}-{min(i+chunk_size, total)})")
         return
 
 
@@ -283,19 +293,95 @@ class DB_PLO:
         print(f"✅ Returned {len(board_id_map)} boards")
         return board_id_map
 
+    def get_evaluations(self, hand_id: int, board_ids: list[int]):
+        """
+        Return all evaluations for a given hand_id restricted to a list of board_ids.
+        """
+        if not board_ids:
+            return []
 
-    def get_evaluations(self):
-        self.cursor.execute(
-            "SELECT * FROM plo_evaluations;"
-        )
-    
+        placeholders = ",".join(["%s"] * len(board_ids))
+        query = f"""
+            SELECT board_id, hand_id, hand_value, rank_dense
+            FROM plo_evaluations
+            WHERE hand_id = %s AND board_id IN ({placeholders});
+        """
+        self.cursor.execute(query, [hand_id] + board_ids)
+        return self.cursor.fetchall()
+
+    def get_evaluations_for_hands_and_boards_bm(self, hand_masks, board_masks):
+        """
+        Fetch evaluations for a given list of hand_ids and board_ids.
+        
+        Returns:
+            dict mapping (hand_id, board_id) -> (high_hand_value, rank_dense)
+        """
+        # Query using hand_mask and board_mask directly
+        # Returns dict: {(hand_mask, board_mask): (high_value, low_value)}
+        if not hand_masks or not board_masks:
+            return {}
+
+        # Convert lists to tuples for SQL IN clause
+        hand_masks_tuple = tuple(hand_masks)
+        board_masks_tuple = tuple(board_masks)
+
+        # Construct SQL
+        query = f"""
+            SELECT hand_mask, board_mask, high_value, low_value
+            FROM plo_evaluations_bm
+            WHERE hand_mask IN %s AND board_mask IN %s;
+        """
+
+        self.cursor.execute(query, (hand_masks_tuple, board_masks_tuple))
         rows = self.cursor.fetchall()
-    
-        # # Create mapping from board string to board_id
-        # board_id_map = {board_str: board_id for board_id, board_str in rows}
 
-        print(f"✅ Returned {len(rows)} evaluations")
-        return rows
+        eval_dict = {(h_id, b_id): (value, rank) for h_id, b_id, value, rank in rows}
+
+        print(f"✅ Loaded {len(eval_dict)} evaluations for {len(hand_masks)} hands x {len(board_masks)} boards")
+        return eval_dict
+
+
+    def get_evaluations_for_hands_and_boards(self, hand_ids, board_ids):
+        """
+        Fetch evaluations for a given list of hand_ids and board_ids.
+        
+        Returns:
+            dict mapping (hand_id, board_id) -> (high_hand_value, rank_dense)
+        """
+        if not hand_ids or not board_ids:
+            return {}
+
+        # Convert lists to tuples for SQL IN clause
+        hand_ids_tuple = tuple(hand_ids)
+        board_ids_tuple = tuple(board_ids)
+
+        # Construct SQL
+        query = f"""
+            SELECT hand_id, board_id, hand_value, rank_dense
+            FROM plo_evaluations
+            WHERE hand_id IN %s AND board_id IN %s;
+        """
+
+        self.cursor.execute(query, (hand_ids_tuple, board_ids_tuple))
+        rows = self.cursor.fetchall()
+
+        eval_dict = {(h_id, b_id): (value, rank) for h_id, b_id, value, rank in rows}
+
+        print(f"✅ Loaded {len(eval_dict)} evaluations for {len(hand_ids)} hands x {len(board_ids)} boards")
+        return eval_dict
+
+    # def get_evaluations(self):
+    #     self.cursor.execute(
+    #         "SELECT * FROM plo_evaluations;"
+    #     )
+    
+    #     rows = self.cursor.fetchall()
+    
+    #     # # Create mapping from board string to board_id
+    #     # board_id_map = {board_str: board_id for board_id, board_str in rows}
+
+    #     print(f"✅ Returned {len(rows)} evaluations")
+    #     return rows
 
     def get_evaluations_for_hand(self, hand_id):
         self.cursor.execute(

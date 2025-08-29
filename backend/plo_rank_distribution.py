@@ -3,6 +3,7 @@ import numpy as np
 import os
 import json
 from itertools import combinations
+import time
 
 from db_plo import DB_PLO, open_db
 from deck import RANKS
@@ -202,10 +203,313 @@ def value_on_board(db, hand_arr, board_arr):
 
             evals_for_board = [row for row in hand_evaluations if row[0] == board_id]
             for _, _, value, rank in evals_for_board:
-                print(f"Board: {board_key}, Hand: {hand}, Hand Value: {value}, Rank: {rank}")
+                # print(f"Board: {board_key}, Hand: {hand}, Hand Value: {value}, Rank: {rank}")
                 lowest_value = min(lowest_value, value)
 
     return lowest_value if lowest_value != float("inf") else None
+
+
+def value_on_board_fast(db, hand_arr, board_arr):
+    """
+    Calculates the best rank a hand can make on a given board.
+    
+    Arguments:
+        db: The PLO evaluations database.
+        hand_str: Array of string representing the hand being evaluated.
+        board_str: Array of strings representing the cards for the board being evaluated.
+
+    Returns:
+        Tuple of (value, rank) for the hand.
+    """
+    hand_id_map = db.get_hand_ids()
+    board_id_map = db.get_board_ids()
+    board_key_map = {v: k for k, v in board_id_map.items()}
+    lowest_value = float("inf")
+
+    # Generate 2-card combos
+    hand_combos = [
+        "".join(sorted(combo, key=card_sort_key))
+        for combo in combinations(hand_arr, 2)
+    ]
+
+    # Generate 3-card combos
+    board_combos = [
+        "".join(sorted(combo, key=card_sort_key))
+        for combo in combinations(board_arr, 3)
+    ]
+
+    # Map board strings → ids (filtering out missing ones up front)
+    board_ids = [board_id_map[b] for b in board_combos if b in board_id_map]
+
+    for hand in hand_combos:
+        hand_id = hand_id_map.get(hand)
+        if hand_id is None:
+            continue
+
+        # Query DB once for all valid board_ids
+        rows = db.get_evaluations(hand_id, board_ids)
+
+        for board_id, _, value, rank in rows:
+            board_key = board_key_map[board_id]  
+            # board_key = next(k for k, v in board_id_map.items() if v == board_id)  # reverse lookup if needed
+            # print(f"Board: {board_key}, Hand: {hand}, Hand Value: {value}, Rank: {rank}")
+            lowest_value = min(lowest_value, value)
+
+    return lowest_value if lowest_value != float("inf") else None
+
+# def build_remaining_deck(hands, board=None):
+#     deck = {r+s for r in "23456789TJQKA" for s in "shdc"}
+#     used = set(card for hand in hands for card in hand)
+#     if board:
+#         used.update(board)
+#     return list(deck - used)
+
+def remaining_deck(all_cards, player_hands, board=None):
+    used_cards = set(card for hand in player_hands for card in hand)
+    if board:
+        used_cards.update(board)
+    return [c for c in all_cards if c not in used_cards]
+
+
+def get_board_ids_for_boards(db, boards):
+    board_id_map = db.get_board_ids()   # {board_str: board_id}
+    return [board_id_map["".join(sorted(board, key=db.card_sort_key))] 
+            for board in boards]
+
+def generate_three_card_boards(deck, player_hands, board=None):
+    """
+    Generate all 3-card boards consistent with player hands and an optional board.
+    
+    Args:
+        deck: List of all card strings in the deck
+        player_hands: List of hands (each hand is a list of card strings)
+        board: Optional list of cards (flop or turn)
+    
+    Returns:
+        List of 3-card boards (each a tuple of 3 card strings)
+    """
+    # Remaining cards in deck
+    rem_deck = remaining_deck(deck, player_hands, board)
+    
+    three_card_boards = set()
+    
+    if board is None:
+        # No board given: all combinations of 3 from remaining deck
+        three_card_boards.update(combinations(rem_deck, 3))
+    else:
+        board_len = len(board)
+        if board_len == 3:
+            # Flop
+            three_card_boards.add(tuple(board))  # the flop itself
+            # 2 flop + 1 from deck
+            for two_flop in combinations(board, 2):
+                for c in rem_deck:
+                    three_card_boards.add(tuple(sorted(list(two_flop) + [c], key=card_sort_key)))
+            # 1 flop + 2 from deck
+            for one_flop in combinations(board, 1):
+                for two_other in combinations(rem_deck, 2):
+                    three_card_boards.add(tuple(sorted(list(one_flop) + list(two_other), key=card_sort_key)))
+        elif board_len == 4:
+            # Turn
+            # Any 3-card subset of turn
+            for three_from_turn in combinations(board, 3):
+                three_card_boards.add(tuple(sorted(three_from_turn, key=card_sort_key)))
+            # Any 2 from turn + 1 from remaining deck
+            for two_from_turn in combinations(board, 2):
+                for c in rem_deck:
+                    three_card_boards.add(tuple(sorted(list(two_from_turn) + [c], key=card_sort_key)))
+        else:
+            raise ValueError("Board must be None, length 3 (flop), or length 4 (turn)")
+    
+    return list(three_card_boards)
+
+
+def get_evaluations_for_hands_and_boards(db, hand_list, possible_boards):
+    """
+    Retrieve precomputed evaluations from the database for the given hands and boards.
+
+    Args:
+        db: Database connection / wrapper with cursor access.
+        hand_list: List of hands (strings).
+        possible_boards: List of board strings (3-card combos).
+
+    Returns:
+        dict mapping (hand, board) -> evaluation score/value
+    """
+
+    # First, convert hands and boards to their IDs
+    hand_id_map = db.get_hand_ids()   # e.g. {'AsKsQsJh': 12345, ...}
+    board_id_map = db.get_board_ids() # e.g. {'AsKsQs': 6789, ...}
+
+    hand_ids = [hand_id_map[h] for h in hand_list if h in hand_id_map]
+    board_ids = [board_id_map[b] for b in possible_boards if b in board_id_map]
+
+    if not hand_ids or not board_ids:
+        return {}
+
+    # Build query for required evaluations
+    # Assume `evaluations` table has schema: (hand_id, board_id, value)
+    query = """
+        SELECT hand_id, board_id, value
+        FROM evaluations
+        WHERE hand_id = ANY(%s) AND board_id = ANY(%s)
+    """
+
+    db.cursor.execute(query, (hand_ids, board_ids))
+    rows = db.cursor.fetchall()
+
+    # Build dictionary mapping back to string hands/boards
+    reverse_hand_map = {v: k for k, v in hand_id_map.items()}
+    reverse_board_map = {v: k for k, v in board_id_map.items()}
+
+    eval_dict = {}
+    for hand_id, board_id, value in rows:
+        hand_str = reverse_hand_map[hand_id]
+        board_str = reverse_board_map[board_id]
+        eval_dict[(hand_str, board_str)] = value
+
+    return eval_dict
+
+
+def generate_possible_boards_with_weights(deck, board=None):
+    """
+    Generate all possible 3-card boards consistent with a given partial board.
+    Returns list of (board_tuple, weight).
+    """
+    board = board or []
+    board_set = set(board)
+    remaining = [c for c in deck if c not in board_set]
+    results = []
+
+    if len(board) == 0:
+        # Preflop: all 3-card combinations equally likely
+        for combo in combinations(deck, 3):
+            results.append((tuple(combo), 1.0))
+        return results
+
+    if len(board) == 3:
+        # Flop known: must always include the exact flop (weight=1.0)
+        results.append((tuple(board), 1.0))
+        # Boards with 2 flop + 1 unknown
+        for flop2 in combinations(board, 2):
+            for other in remaining:
+                results.append((tuple(sorted(flop2 + (other,))), 1.0 / len(remaining)))
+        # Boards with 1 flop + 2 unknown
+        for flop1 in board:
+            for other2 in combinations(remaining, 2):
+                results.append((tuple(sorted((flop1,) + other2)), 1.0 / comb(len(remaining), 2)))
+
+    elif len(board) == 4:
+        # Turn known: include all 3-card subsets of the 4 cards (weight=1.0 each)
+        for combo in combinations(board, 3):
+            results.append((tuple(combo), 1.0))
+        # Boards with 2 turn cards + 1 unknown
+        for flop2 in combinations(board, 2):
+            for other in remaining:
+                results.append((tuple(sorted(flop2 + (other,))), 1.0 / len(remaining)))
+
+    else:
+        raise ValueError("Only flop (3) or turn (4) supported.")
+
+    return results
+
+
+def calculate_equity(hands, deck, board=None, db_lookup=None):
+    """
+    Calculate equity for multiple hands given a possible partial board.
+    - hands: list of hand tuples
+    - deck: full deck of cards
+    - board: list of known board cards (len 0, 3, or 4)
+    - db_lookup: function(hand, board) -> (high_val, low_val)
+    """
+    board_weights = generate_possible_boards_with_weights(deck, board)
+    scores = defaultdict(float)
+
+    for board_combo, weight in board_weights:
+        evals = []
+        for hand in hands:
+            high_val, low_val = db_lookup(hand, board_combo)
+            evals.append((hand, high_val, low_val))
+
+        # Find winners
+        max_high = max(ev[1] for ev in evals)
+        winners = [ev[0] for ev in evals if ev[1] == max_high]
+
+        for w in winners:
+            scores[w] += weight / len(winners)
+
+    # Normalize equities
+    total_weight = sum(weight for _, weight in board_weights)
+    equities = {hand: score / total_weight for hand, score in scores.items()}
+
+    return equities
+
+def calculate_equity_for_multiple_hands(db, hand_list, board=None):
+    # Step 1: Remaining deck
+    remaining = build_remaining_deck(hand_list, board)
+    
+    # Step 2: Generate all possible boards
+    possible_boards = generate_possible_boards(remaining, board)
+    
+    # Step 3: Map hands and boards to IDs
+    hand_id_map = db.get_hand_ids()
+    board_id_map = db.get_board_ids()
+    
+    hand_ids = [hand_id_map["".join(sorted(hand, key=db.card_sort_key))] 
+                for hand in hand_list]
+    board_ids = [board_id_map["".join(sorted(b, key=db.card_sort_key))] 
+                 for b in possible_boards]
+
+    # Step 4: Query DB for needed evaluations
+    evals = db.get_evaluations_for_hands_and_boards(hand_ids, board_ids)
+    
+    # Step 5: Loop over boards → compare hand strengths
+    equity_counts = [0] * len(hand_list)
+    
+    for b_id in board_ids:
+        values = [evals[(h_id, b_id)] for h_id in hand_ids]
+        max_val = max(values)
+        winners = [i for i, v in enumerate(values) if v == max_val]
+        for w in winners:
+            equity_counts[w] += 1 / len(winners)  # split pots
+    
+    total = sum(equity_counts)
+    equities = [c / total for c in equity_counts]
+    return equities
+
+def calculate_equity_for_multiple_hands(db, hand_list, board=None):
+    """
+    Calculates the equities for a list of hands.
+    
+    Arguments:
+        db: The PLO evaluations database.
+        hand_list: A list of lists of strings representing the hands being evaluated.
+        board: Array of strings representing the cards for the board being evaluated.
+
+    Returns:
+
+        List/array of equities.
+    """
+    hand_id_map = db.get_hand_ids()
+    board_id_map = db.get_board_ids()
+    board_key_map = {v: k for k, v in board_id_map.items()}
+
+    # Generate 2-card combos for each player
+
+    # Generate potential board cards by removing player hand cards from deck
+
+    # Generate 3-card combos from potential board cards
+
+    # Retrieve evaluations for required hand combos for required boards
+
+    # For each board:
+    # value each players hand
+    # determine winner(s) 
+    
+    # Determine equity for each hand
+
+    # Return list / array of equities
+
 
 
 def show_all_boards_with_card(db, card_str):
@@ -244,10 +548,18 @@ def main():
     # print(chart_data)
  
     # show_all_boards_with_card(db, "Tc")
-
+    start_time = time.time()
     rank = value_on_board(db, ["As", "Kh", "Jc", "3c"], ["Ac", "Qd", "Jh", "Tc", "Qc"])
-    print(rank)
+    end_time = time.time()
+    print(f"Best hand: {rank}")
+    print(f"Time taken: {end_time - start_time}")
  
+    start_time = time.time()
+    rank = value_on_board_fast(db, ["As", "Kh", "Jc", "3c"], ["Ac", "Qd", "Jh", "Tc", "Qc"])
+    end_time = time.time()
+    print(f"Best hand: {rank}")
+    print(f"Time taken: {end_time - start_time}")
+
     # Close the DB connection
     db.close()
 
