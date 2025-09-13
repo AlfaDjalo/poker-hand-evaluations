@@ -81,7 +81,7 @@ class DB_PLO:
         self.conn.commit()
         print("✅ Primary key removed from PLO evaluations table.")
 
-    def replace_indices_on_evaluations(self):
+    def recreate_indices_on_evaluations(self):
         """
         Function to recreate indices for plo_evaluations table.
         Required once rows have been added to the table.
@@ -89,6 +89,17 @@ class DB_PLO:
         self.cursor.execute("ALTER TABLE plo_evaluations ADD PRIMARY KEY (board_id, hand_id);")
         self.conn.commit()
         print("✅ Primary key added to PLO evaluations table.")
+
+    def add_indices_on_evaluations(self):
+        """
+        Function to recreate indices for plo_evaluations table.
+        Required once rows have been added to the table.
+        """
+        self.cursor.execute("CREATE INDEX idx_board_mask ON plo_evaluations_bm(board_mask);")
+        self.cursor.execute("CREATE INDEX idx_hand_mask  ON plo_evaluations_bm(hand_mask);")
+        self.conn.commit()
+        print("✅ Indices added to PLO evaluations table.")
+
 
     # Reset tables
     def clear_table(self, table_name):

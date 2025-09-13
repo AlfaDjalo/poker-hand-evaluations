@@ -1,0 +1,28 @@
+.deckGrid {
+  display: grid;
+  grid-template-columns: 1fr; /* default: 1 suit per row (mobile) */
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .deckGrid {
+    grid-template-columns: 1fr 1fr; /* laptop: 2 suits per row */
+  }
+}
+
+.suitRow {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.poker-card {
+  width: 2.2rem;   /* shrink card size */
+  height: auto;    /* keep correct aspect ratio */
+}
+
+.poker-card-placeholder {
+  width: 2.2rem;
+  height: 3.2rem;
+  visibility: hidden;
+}

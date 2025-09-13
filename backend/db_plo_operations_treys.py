@@ -199,6 +199,7 @@ def main():
     # Initialize DB connection
     db = open_db()
 
+    # db.add_indices_on_evaluations()
     # db.drop_table("plo_boards")
     # db.drop_table("plo_evaluations")
     # db.init_schema()

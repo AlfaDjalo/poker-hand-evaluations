@@ -515,16 +515,16 @@ def calculate_hilo_equity_for_multiple_hands(db, player_hands: List[List[str]], 
             player_best_high_values.append(best_high_value if best_high_value != float('inf') else None)
             player_best_low_values.append(best_low_value if best_low_value != float('inf') else None)
         
-        if debug and board_idx < 3:
-            print(f"  Player best high values: {player_best_high_values}")
-            if hilo:
-                print(f"  Player best low values: {player_best_low_values}")
+        # if debug and board_idx < 3:
+        #     print(f"  Player best high values: {player_best_high_values}")
+        #     if hilo:
+        #         print(f"  Player best low values: {player_best_low_values}")
         
         # Skip boards where any player has no valid evaluation
-        if None in player_best_high_values:
-            if debug and board_idx < 3:
-                print(f"  Skipping board due to missing evaluations")
-            continue
+        # if None in player_best_high_values:
+        #     if debug and board_idx < 3:
+        #         print(f"  Skipping board due to missing evaluations")
+        #     continue
         
         # Determine winners for this complete 5-card board (lowest value wins)
         best_high_value = min(player_best_high_values)
@@ -538,31 +538,38 @@ def calculate_hilo_equity_for_multiple_hands(db, player_hands: List[List[str]], 
         if (len(low_winners) > 1) and (best_low_value < 999999):
             boards_with_low_ties += 1
 
+        # print(complete_board)
+
         if ((best_low_value == 99999) or (not hilo)):
             # if debug:
             #     print(f"No low possible. Winners: {high_winners}")
             boards_with_no_low_made += 1
             # Distribute equity among winners
             equity_per_winner = 1.0 / len(high_winners)
+            # print(equity_per_winner)
             for winner_idx in high_winners:
                 total_equity[winner_idx] += equity_per_winner
                 high_equity[winner_idx] += equity_per_winner
         else:
             # if debug:
-            #     print(f"Low made. Winners - high: {high_winners} low: {low_winners}")
+                # print(f"Low made. Winners - high: {high_winners} low: {low_winners}")
             equity_per_high_winner = 1.0 / len(high_winners) / 2
+            # print(equity_per_high_winner)
             for winner_idx in high_winners:
                 total_equity[winner_idx] += equity_per_high_winner
                 high_equity[winner_idx] += equity_per_high_winner
             equity_per_low_winner = 1.0 / len(low_winners) / 2
+            # print(equity_per_low_winner)
             for winner_idx in low_winners:
                 total_equity[winner_idx] += equity_per_low_winner
                 low_equity[winner_idx] += equity_per_low_winner
+            
+        # print(total_equity)
 
-        if debug and board_idx < 3:
-            print(f"  Winners: {high_winners} (value: {best_high_value})")
-            if hilo:
-                print(f"  Low Winners: {low_winners} (value: {best_low_value})")
+        # if debug and board_idx < 3:
+        #     print(f"  Winners: {high_winners} (value: {best_high_value})")
+        #     if hilo:
+        #         print(f"  Low Winners: {low_winners} (value: {best_low_value})")
 
     
     if debug:
@@ -891,14 +898,14 @@ def main():
 
     # 4-card HiLo Tests
     # debug_specific_board_scenario(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c", "2h"], "Ah")
-    equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], hilo=True, debug=True)
-    print(equities)
-    equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c"], hilo=True, debug=True)
-    print(equities)
-    equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c", "2h"], hilo=True, debug=True)
-    print(equities)
-    equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c", "2h", "4d"], hilo=True, debug=True)
-    print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c"], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c", "2h"], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]], ["Tc", "7d", "7c", "2h", "4d"], hilo=True, debug=True)
+    # print(equities)
 
     # 4-card Double Board Tests
     # equities = calculate_double_board_equity(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"]])
@@ -922,6 +929,16 @@ def main():
     # equities = calculate_equity_for_multiple_hands_exhaustive(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "5h"]], ["Tc", "7d", "7c", "2h", "4d"])
     # print(equities)
 
+    # 4-card hilo tests with 3 hands
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], ["Tc", "7d", "7c"], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], ["Tc", "7d", "7c", "2h"], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], ["Tc", "7d", "7c", "2h", "4d"], hilo=True, debug=True)
+    # print(equities)
+
     # 5-card tests
     # equities = calculate_equity_for_multiple_hands_exhaustive(db, [["As", "Kd", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h", "6d"]])
     # print(equities)
@@ -930,6 +947,16 @@ def main():
     # equities = calculate_equity_for_multiple_hands_exhaustive(db, [["As", "Kd", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h", "6d"]], ["Tc", "7d", "7c", "2h"])
     # print(equities)
     # equities = calculate_equity_for_multiple_hands_exhaustive(db, [["As", "Kd", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h", "6d"]], ["Tc", "7d", "7c", "2h", "4d"])
+    # print(equities)
+
+    # 5-card hilo tests with 3 hands
+    equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Ac", "Js", "9h", "3s"], ["Ah", "Ad", "9c", "7d", "2h"], ["Ts", "Td", "8c", "7h", "6d"]], hilo=True, debug=True)
+    print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], ["Tc", "7d", "7c"], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], ["Tc", "7d", "7c", "2h"], hilo=True, debug=True)
+    # print(equities)
+    # equities = calculate_hilo_equity_for_multiple_hands(db, [["As", "Jd", "7s", "5c"], ["Qh", "Jc", "9c", "8h"], ["Ah", "Ad", "Ts", "3h"]], ["Tc", "7d", "7c", "2h", "4d"], hilo=True, debug=True)
     # print(equities)
 
     # 6-card tests

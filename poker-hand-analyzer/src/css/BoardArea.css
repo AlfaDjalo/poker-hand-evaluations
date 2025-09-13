@@ -1,0 +1,27 @@
+.board-area {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 0.25rem;
+
+  /* Make board fit inside parent container */
+  width: 90%;
+  height: auto;
+  margin: 0 auto;
+  max-width: 100%;
+  aspect-ratio: 10 / 5; /* grid proportions */
+}
+
+.board-cell {
+  aspect-ratio: 5 / 7; /* maintain card shape */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden; /* keep images tidy */
+}
+
+.board-cell img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
