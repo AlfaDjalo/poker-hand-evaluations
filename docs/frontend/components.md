@@ -3,10 +3,12 @@
 - **Purpose**: Display a single card
 - **Props**:
   - `card` (string | null) – e.g. "AS". null = empty slot.
-  - `hidden` (boolean, default: false) – If true, renders the back of the card. ***
   - `scale` (float, default: 1.0) – Controls card size. ***
-  - `isClickable` (boolean, default: true) – Disables click if false.
+  - `isHidden` (boolean, default: false) – If true, renders the back of the card. ***
   - `isSelected` (boolean, default: false) – Indicator of if card has been selected.
+  - `isActiveTarget` (boolean, default: false) = Indicator of if card is active target.
+  - `showOutline` (boolean, default: true) - Shows outline of empty cards if true.
+  - `isClickable` (boolean, default: true) – Disables click if false.
   - `onClick` (function, optional) – Handler when card is clicked.
 - **State**:
   - Nil
@@ -17,12 +19,17 @@
 - **Props**:
   - `cards` (Array<{ card: string, hidden: boolean }> required) – Cards in the hand.
   - `scale` (float, default: 0.7) – Controls card scaling.
-  - `overlap` (boolean, default: true) – Whether cards overlap horizontally.
-  - `overlapOffset` (number, default: 20) – Pixel offset for overlapping.
+  - `showSlots` (boolean, default: false) - Show empty card outlines if true.
+  - `activeSlot` (integer) - the index of the active slot.
+  - `onCardClick` (function, optional) - Handler when card is clicked.
+  - `onSlotClick` (function, optional) - Handler when empty card slot is clicked.
+  - `maxCards` (integer, default: 4) - the maximum number of cards in a hand.
+  <!-- - `overlap` (boolean, default: true) – Whether cards overlap horizontally.
+  - `overlapOffset` (number, default: 20) – Pixel offset for overlapping. -->
 - **State**:
   - Nil
 - **Output**: Renders a row of PokerCards with optional overlap.
-- **Comments**: Need to reverse the overlap so that cards on left are on top.
+- **Comments**: Need to reimplement overlap.
 
 ## `PlayerSeat.jsx`
 - **Purpose**: Show one player’s seat at the table.
@@ -40,8 +47,13 @@
 ## `BoardArea.jsx`
 - **Purpose**: Display communal cards.
 - **Props**:
-  - `boardCards` (Array<{ card: string, hidden: boolean }> required) – Cards on the boand.
-  - `onClick` (function, optional) – Handler when the board area is clicked.
+  - `cards` (Array<{ card: string, hidden: boolean }> required) – Cards on the board.
+  - `scale` (float, default: 0.7) – Controls card scaling.
+  - `showSlots` (boolean, default: false) - Show empty card outlines if true.
+  - `activeSlot` (integer) - the index of the active slot.
+  - `onCardClick` (function, optional) - Handler when card is clicked.
+  - `onSlotClick` (function, optional) - Handler when empty card slot is clicked.
+  - `onAreaClick` (function, optional) – Handler when the board area is clicked.
 - **State**:
   - Nil
 - **Output**: Renders board area.

@@ -6,10 +6,12 @@ const backCardURL = "https://deckofcardsapi.com/static/img/back.png";
 
 const Card = ({ 
   card = null, 
-  hidden = false, 
   scale = 1.0, 
-  isClickable = true, 
+  isHidden = false, 
   isSelected = false,
+  isActiveTarget = false,
+  showOutline = false,
+  isClickable = true, 
   onClick 
 }) => {
   const normalizeForImage = (card) => {
@@ -23,17 +25,19 @@ const Card = ({
   const scaleFactor = Math.max(0.1, Math.min(3.0, Number(scale) || 1.0));
 
   if (!card) {
-    // Render empty slot
     return (
-      <span 
-        className="cardEmpty" 
+      <span
+        className={`cardEmpty 
+          ${showOutline ? "cardEmpty-outline" : ""} 
+          ${isActiveTarget ? "card-target" : ""}`}
         style={{ transform: `scale(${scaleFactor})` }}
+        onClick={onClick}
       />
     );
   }
 
   // If card is hidden, show card back
-  if (hidden) {
+  if (isHidden) {
     return (
       <img
         src={backCardURL}
@@ -51,7 +55,11 @@ const Card = ({
   const apiCard = normalizeForImage(card);
   
   // Build class names properly
-  const classNames = `card ${isSelected ? 'selected' : ''}`;
+  // const classNames = `card ${isSelected ? 'selected' : ''}`;
+  const classNames=`card 
+    ${isSelected ? "selected" : ""} 
+    ${isClickable ? "clickable" : ""} 
+    ${isActiveTarget ? "card-target" : ""}`
 
   return (
     <img
@@ -63,30 +71,31 @@ const Card = ({
         cursor: isClickable ? 'pointer' : 'default',
         transform: `scale(${scaleFactor})`
       }}
-      onError={(e) => {
-        console.error(`Failed to load card image for ${card}`);
-        // Create a fallback div instead of modifying the image
-        const fallback = document.createElement('div');
-        fallback.className = 'cardEmpty';
-        fallback.textContent = card;
-        fallback.style.cssText = `
-          display: flex; 
-          align-items: center; 
-          justify-content: center; 
-          background: #f0f0f0; 
-          border: 1px solid #ccc;
-          border-radius: 0.25rem;
-          font-size: 12px;
-          font-weight: bold;
-          cursor: ${isClickable ? 'pointer' : 'default'};
-          transform: scale(${scaleFactor});
-        `;
-        if (isClickable && onClick) {
-          fallback.addEventListener('click', onClick);
-        }
-        e.target.parentNode.replaceChild(fallback, e.target);
-      }}
     />
+
+      // onError={(e) => {
+      //   console.error(`Failed to load card image for ${card}`);
+      //   // Create a fallback div instead of modifying the image
+      //   const fallback = document.createElement('div');
+      //   fallback.className = 'cardEmpty';
+      //   fallback.textContent = card;
+      //   fallback.style.cssText = `
+      //     display: flex; 
+      //     align-items: center; 
+      //     justify-content: center; 
+      //     background: #f0f0f0; 
+      //     border: 1px solid #ccc;
+      //     border-radius: 0.25rem;
+      //     font-size: 12px;
+      //     font-weight: bold;
+      //     cursor: ${isClickable ? 'pointer' : 'default'};
+      //     transform: scale(${scaleFactor});
+      //   `;
+      //   if (isClickable && onClick) {
+      //     fallback.addEventListener('click', onClick);
+      //   }
+      //   e.target.parentNode.replaceChild(fallback, e.target);
+      // }}
   );
 };
 
