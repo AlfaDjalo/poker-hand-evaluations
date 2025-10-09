@@ -28,6 +28,7 @@ const PlayerSeat = ({
             <span className="player-chips">${player.chips}</span>
           </div>
           <Hand 
+            seatNumber={seatNumber}
             cards={player.hand}
             scale={1}
             showSlots={true}

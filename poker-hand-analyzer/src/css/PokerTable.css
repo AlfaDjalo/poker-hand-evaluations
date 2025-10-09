@@ -176,3 +176,33 @@
     height: min(80vh, 80vw / 2.4);
   }
 }
+
+.table-inner {
+  position: relative;
+  border-radius: 50%;
+  transition: box-shadow 0.2s ease;
+}
+
+/* When an item is dragged over the board area */
+.table-inner.droppable-over {
+  box-shadow: 0 0 25px 5px rgba(0, 255, 0, 0.4);
+  transform: scale(1.02);
+  transition: all 0.15s ease;
+}
+
+.table-inner.hovered {
+  box-shadow: 0 0 25px 5px rgba(0, 255, 0, 0.5);
+  transition: box-shadow 0.2s ease;
+}
+
+.table-inner {
+  outline: 2px solid red;
+  position: relative;
+  z-index: 0;
+}
+
+.board-container {
+  outline: 2px dashed blue;
+  position: relative;
+  z-index: 1;
+}

@@ -1,4 +1,32 @@
 .board-area {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 12px; /* important so gaps exist */
+  border-radius: 8px;
+  /* background-color: yellow; */
+  background-color: rgba(0, 80, 0, 0.4);
+  z-index: 1;
+}
+
+.board-slot {
+  position: relative;
+  z-index: 2; /* above the area for pointer events */
+}
+
+.board-area.hovered {
+  background-color: rgba(0, 100, 0, 0.6);
+}
+
+.board-area > * {
+  pointer-events: auto;
+}
+
+
+/* 
+.board-area {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -9,10 +37,10 @@
   display: inline-block;
   transition: margin-left 0.2s ease, transform 0.2s ease;
   position: relative;
-}
+} */
 
 /* Hover effect to spread cards slightly */
-.board-area:hover .board-card {
+/* .board-area:hover .board-card {
   transform: translateY(-2px);
 }
 
@@ -21,59 +49,11 @@
   z-index: 10;
 }
 
-/* 
-
 .board-area {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin: 1rem auto;
-} */
+  position: relative;
+  pointer-events: none; /* allow clicks to pass through */
+/* }
 
-/* .board-cell {
-  aspect-ratio: 5 / 7;
-  width: 3rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border: 2px solid transparent;
-  border-radius: 6px;
-  transition: border-color 0.2s ease;
-} */
-/* 
-.board-cell.placeholder {
-  border: 2px dashed #888;
-}
-
-.board-cell.selected {
-  border: 2px solid #4caf50;
-} */
-
-
-/* .board-area {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  grid-template-rows: repeat(5, 1fr);
-  gap: 0.25rem; */
-
-  /* Make board fit inside parent container */
-  /* width: 90%;
-  height: auto;
-  margin: 0 auto;
-  max-width: 100%;
-  aspect-ratio: 10 / 5; /* grid proportions */
+.board-area.hovered {
+  pointer-events: all; /* re-enable during drag hover */
 /* } */
-
-/* .board-cell { */
-  /* aspect-ratio: 5 / 7; maintain card shape */
-  /* display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden; keep images tidy */
-/* } */
-
-/* .board-cell img {
-  width: 100%;
-  height: auto;
-  object-fit: contain;
-} */

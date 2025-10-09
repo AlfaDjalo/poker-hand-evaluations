@@ -1,7 +1,6 @@
 import React from "react";
-// import { useDroppable } from "@dnd-kit/core";
-// import Card from "./Card";
-import DroppableBoardSlot from "./DroppableBoardSlot";
+import DroppableSlot from "./DroppableSlot";
+// import DroppableBoardSlot from "./DroppableBoardSlot";
 import { useDroppable } from "@dnd-kit/core";
 import "../css/BoardArea.css";
 
@@ -13,7 +12,6 @@ const BoardArea = ({
   onCardClick,
   onSlotClick, 
   onAreaClick,
-  onDropToBoard,
   maxCards=5
  }) => {
   // Create array with empty slots
@@ -21,20 +19,18 @@ const BoardArea = ({
     cards[index] || null
   );
 
-  // handle click on the container
-  // const handleBoardClick = (e) => {
-  //   onAreaClick()
-    // if (e.target === e.currentTarget) {
-      // click on the empty space, not a card
-      // onSelectBoard();
-    // }
-  // };
-
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef: setBoardAreaRef, isOver: isOverBoardArea } = useDroppable({
     id: "board-area",
-    data: { type: "board-area" },
+    data: "board-area",
+    // data: { type: "board-area" },
   });
-  
+
+  // const { setNodeRef, isOver } = useDroppable({
+  //   id: "board-area",
+  //   data: { type: "board-area" },
+  //   disabled: cards.some(Boolean), // disable if there are slots/cards
+  // });
+
   React.useEffect(() => {
     console.log("BoardArea droppable mounted: board-area");
   }, []);
@@ -43,15 +39,21 @@ const BoardArea = ({
     // <div className="board-area" onClick={onAreaClick}>
 
     <div
-      ref={setNodeRef}
-      className={`board-area ${isOver ? "hovered" : ""}`}
-      onClick={onAreaClick}
+      ref={setBoardAreaRef}
+      className={`board-area ${isOverBoardArea ? "hovered" : ""}`}
+      onClick={(e) => {
+        // Detect clicks *not* on any child slot
+        if (e.target === e.currentTarget) {
+          onAreaClick();
+        }
+      }}
     >
-
       {slots.map((cardObj, index) => (
-        <DroppableBoardSlot
+        <DroppableSlot
+        // <DroppableBoardSlot
           key={index}
           index={index}
+          variant={"board"}
           cardObj={cardObj}
           scale={scale}
           showSlots={showSlots}
@@ -59,32 +61,6 @@ const BoardArea = ({
           onCardClick={onCardClick}
           onSlotClick={onSlotClick}
         />
-        // const { setNodeRef, isOver } = useDroppable({
-        //   id: `board-slot-${index}`,
-        //   data: { index },
-        // });
-
-        // return (
-        //   <div
-        //     ref={setNodeRef}
-        //     key={index}
-        //     className={`board-slot ${activeSlot === index ? "active-slot" : ""} ${
-        //       isOver ? "hovered" : ""
-        //     }`}
-        //   >          
-
-        //     <Card
-        //       card={cardObj ? cardObj.card : null}
-        //       scale={scale}
-        //       isHidden={cardObj?.hidden}
-        //       isSelected={cardObj?.selected}
-        //       isActiveTarget={activeSlot === index}
-        //       showOutline={showSlots}
-        //       isClickable={true}
-        //       onClick={() => (cardObj ? onCardClick(index) : onSlotClick(index))}
-        //     />
-        //   </div>
-        // );
       ))}
     </div>
   );

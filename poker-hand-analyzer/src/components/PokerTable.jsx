@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import PlayerSeat from "./PlayerSeat";
 import BoardArea from "./BoardArea";
 import "../css/PokerTable.css";
+import { useDroppable } from "@dnd-kit/core";
 
 const PokerTable = ({ 
   players,
@@ -17,6 +18,11 @@ const PokerTable = ({
   loading
 }) => {
   
+  const { setNodeRef, isOver } = useDroppable({
+    id: "table-inner",
+    data: { type: "table-inner" },
+  });
+
   return (
     <div className="poker-table-container">
       <div className="poker-table">
@@ -24,7 +30,10 @@ const PokerTable = ({
         <div className="table-outer">
           {/* Inner ellipse - betting line */}
           <div
-            className={`table-inner ${activeTarget?.type === "board" ? "active" : ""}`}
+            ref={setNodeRef}
+            className={`table-inner ${isOver ? "hovered" : ""} ${
+              activeTarget?.type === "board" ? "active" : ""
+            }`}
             onClick={onBoardAreaClick}
           >
             <div className="board-container">

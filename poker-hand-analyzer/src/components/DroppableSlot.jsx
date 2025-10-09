@@ -2,9 +2,10 @@ import React from "react";
 import { useDroppable } from "@dnd-kit/core";
 import Card from "./Card";
 
-const DroppableBoardSlot = ({
+const DroppableSlot = ({
   index,
   cardObj,
+  variant,
   scale,
   showSlots,
   activeSlot,
@@ -12,18 +13,18 @@ const DroppableBoardSlot = ({
   onSlotClick
 }) => {
   const { setNodeRef, isOver } = useDroppable({
-    id: `board-slot-${index}`,
+    id: `${variant}-slot-${index}`,
     data: { index },
   });
 
   React.useEffect(() => {
-    console.log(`DroppableBoardSlot mounted: board-slot-${index}`);
+    console.log(`DroppableSlot mounted: ${variant}-slot-${index}`);
   }, [index]);
 
   return (
     <div
       ref={setNodeRef}
-      className={`board-slot ${activeSlot === index ? 'active-slot' : ''} ${isOver ? 'hovered' : ''}`}
+      className={`${variant}-slot ${activeSlot === index ? 'active-slot' : ''} ${isOver ? 'hovered' : ''}`}
     >
       <Card
         card={cardObj ? cardObj.card : null}
@@ -44,4 +45,4 @@ const DroppableBoardSlot = ({
   );
 };
 
-export default DroppableBoardSlot;
+export default DroppableSlot;

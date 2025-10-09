@@ -206,8 +206,6 @@ const EquityCalculator = () => {
       return;
     }
 
-    if (!over) return; // dropped outside any droppable
-
     const draggedCard = active.data.current?.card; // the card object
     const targetId = over.id; // droppable id
     console.log("Dragged card:", draggedCard, "Target ID:", targetId);
@@ -216,6 +214,8 @@ const EquityCalculator = () => {
       console.log("No dragged card or target ID");
       return;
     }
+
+    console.log("🃏 Dropped", draggedCard, "on", targetId);
 
     // --- Player slot drop ---
     if (targetId.startsWith("player-") && targetId.includes("slot")) {
@@ -251,15 +251,29 @@ const EquityCalculator = () => {
     }
 
     // --- Board area drop (no specific slot) ---
-    if (targetId === "board-area") {
+    if (targetId === "board-area" || targetId === "table-inner") {
       const emptyIndex = boardCards.findIndex((c) => !c);
-      if (emptyIndex !== -1) {
-        handleCardDropToBoard(draggedCard, emptyIndex);
-      }
+      if (emptyIndex !== -1) handleDropToBoard(draggedCard, emptyIndex);
       return;
     }
+
+    // if (targetId === "board-area") {
+    //   const emptyIndex = boardCards.findIndex((c) => !c);
+    //   if (emptyIndex !== -1) {
+    //     handleCardDropToBoard(draggedCard, emptyIndex);
+    //   }
+    //   return;
+    // }
   };
 
+  const handleDropToBoard = (card, slotIndex) => {
+    clearEquities();
+    setBoardCards(prev => {
+      const newBoard = [...prev];
+      newBoard[slotIndex] = { card, hidden: false };
+      return newBoard;
+    });
+  };
 
 
 

@@ -126,5 +126,5 @@ def setup_api_routes(app):
             return jsonify({"error": "Invalid JSON format"}), 500
 
 
-    @app.route("/api/functions", methods=["GET"])
-    def get_functions():
+    # @app.route("/api/functions", methods=["GET"])
+    # def get_functions():
