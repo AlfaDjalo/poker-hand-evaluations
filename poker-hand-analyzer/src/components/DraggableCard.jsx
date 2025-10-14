@@ -1,10 +1,16 @@
 import React, { useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 
-const DraggableCard = ({ id, children, onClick }) => {
+const DraggableCard = ({ id, source, children, onClick }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id,
-    data: { card: id },
+    id: `${id}-${source.type}-${source.index}`, // Make ID unique based on location
+    data: { 
+      card: id,
+      variant: source.variant, // e.g., { type: 'hand', seat: 1, index: 0 }
+      location: source.location, // e.g., { type: 'hand', seat: 1, index: 0 }
+      index: source.index, // e.g., { type: 'hand', seat: 1, index: 0 }
+      // source: source // e.g., { type: 'hand', seat: 1, index: 0 }
+    },
   });
 
   const pointerStart = useRef(null);
@@ -52,60 +58,3 @@ const DraggableCard = ({ id, children, onClick }) => {
 };
 
 export default DraggableCard;
-
-
-
-// // DraggableCard.jsx
-// import React, { useRef } from "react";
-// import { useDraggable } from "@dnd-kit/core";
-
-// const DraggableCard = ({ id, children, onClick }) => {
-//   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ 
-//     id,
-//     data:{ card: id}
-//   });
-  
-//   const pointerStart = useRef({ x: 0, y: 0 });
-
-//   const handlePointerDown = (e) => {
-//     pointerStart.current = { x: e.clientX, y: e.clientY };
-//   };
-
-//   const handlePointerUp = (e) => {
-//     const dx = e.clientX - pointerStart.current.x;
-//     const dy = e.clientY - pointerStart.current.y;
-//     const distance = Math.sqrt(dx * dx + dy * dy);
-
-//     if (distance < 5 && onClick) {
-//       onClick(e);
-//     }
-//   };
-
-//   const style = {
-//     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-//     opacity: isDragging ? 0.8 : 1,
-//     cursor: "grab",
-//     display: "inline-block",
-//     zIndex: isDragging ? 1000 : "auto",  // <-- bring to front while dragging
-//     position: isDragging ? "relative" : "static", // relative so z-index works
-//   };
-
-//   React.useEffect(() => {
-//     console.log(`DraggableCard mounted: ${id}`);
-//   }, [id]);
-
-//   return (
-//     <div
-//       ref={setNodeRef}
-//       style={style}
-//       {...attributes}
-//       {...listeners}
-//     //   onPointerDown={handlePointerDown}
-//     //   onPointerUp={handlePointerUp}
-//     >
-//       {children}
-//     </div>
-//   );
-// };
-
-// export default DraggableCard;

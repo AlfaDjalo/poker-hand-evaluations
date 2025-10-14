@@ -3,6 +3,7 @@ import Card from "./Card";
 import "../css/Card.css";
 import "../css/CardSelector.css";
 import DraggableCard from "./DraggableCard";
+import { useDroppable } from "@dnd-kit/core";
 
 const CardSelector = ({ onSelectCard, usedCards = [] }) => {
   // Generate a standard 52-card deck grouped by suit
@@ -36,6 +37,7 @@ const CardSelector = ({ onSelectCard, usedCards = [] }) => {
           ) : (
             <DraggableCard 
               id={card}
+              source={{ type: 'selector' }}
               onClick={() => handleCardClick(card)}  // click works again
             >
               <Card
@@ -53,8 +55,16 @@ const CardSelector = ({ onSelectCard, usedCards = [] }) => {
     </div>
   );
 
+  const { setNodeRef, isOver } = useDroppable({
+    id: "card-selector",
+    data: { variant: "trash" },
+  });
+
   return (
-    <div className="card-selector">
+    <div
+      ref={setNodeRef}
+      className={`card-selector ${isOver ? "hovered" : ""}`}
+    >
       <h2>Select Cards from Deck</h2>
       <div className="deckGrid">
         {deck.map((suitCards, suitIndex) => renderSuit(suitCards, suitIndex))}

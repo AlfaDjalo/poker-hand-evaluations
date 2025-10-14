@@ -43,3 +43,9 @@
     width: 70px;  /* Same base width as Card on large screens */
   }
 }
+
+.card-selector.hovered {
+  outline: 3px dashed red;
+  background-color: rgba(255, 0, 0, 0.1);
+  transition: background-color 0.2s ease;
+}

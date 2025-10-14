@@ -17,11 +17,11 @@ const PokerTable = ({
   onBoardAreaClick,
   loading
 }) => {
-  
-  const { setNodeRef, isOver } = useDroppable({
-    id: "table-inner",
-    data: { type: "table-inner" },
-  });
+
+  // const { setNodeRef, isOver } = useDroppable({
+  //   id: "table-inner",
+  //   data: { type: "table-inner" },
+  // });
 
   return (
     <div className="poker-table-container">
@@ -30,10 +30,11 @@ const PokerTable = ({
         <div className="table-outer">
           {/* Inner ellipse - betting line */}
           <div
-            ref={setNodeRef}
-            className={`table-inner ${isOver ? "hovered" : ""} ${
-              activeTarget?.type === "board" ? "active" : ""
-            }`}
+            // ref={setNodeRef}
+            className={`table-inner ${activeTarget?.type === "board" ? "active" : ""}`}
+            // className={`table-inner ${isOver ? "hovered" : ""} ${
+            //   activeTarget?.type === "board" ? "active" : ""
+            // }`}
             onClick={onBoardAreaClick}
           >
             <div className="board-container">
@@ -70,7 +71,7 @@ const PokerTable = ({
           );
         })}
       </div>
-    </div>
+    // </div>
   );
 };
 

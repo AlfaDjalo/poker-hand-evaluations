@@ -1,6 +1,7 @@
 import React from "react";
 import "../css/PlayerSeat.css";
 import Hand from "./Hand";
+import { useDroppable } from "@dnd-kit/core";
 
 const PlayerSeat = ({ 
   seatNumber, 
@@ -13,6 +14,12 @@ const PlayerSeat = ({
   loading = false
 }) => {
   
+  // const { setNodeRef: setHandAreaRef, isOver: isOverHandArea } = useDroppable({
+  //   id: `player-seat-${seatNumber}`,    
+  //   data: "player-seat",
+  //   // data: { type: "board-area" },
+  // });
+
   const handleSeatClick = (e) => {
     // Only trigger seat click if not clicking on cards or slots
     if (e.target.closest('.hand') || e.target.closest('.card')) return;
@@ -20,7 +27,13 @@ const PlayerSeat = ({
   };
 
   return (
-    <div className={`player-seat ${isActive ? 'active-target' : ''}`} onClick={handleSeatClick}>
+
+    <div
+      className={`player-seat ${isActive ? 'active-target' : ''}`}
+      // className={`player-seat ${isActive ? 'active-target' : ''} ${isOverHandArea ? "hovered" : ""}`}
+      onClick={handleSeatClick}
+      // ref={setHandAreaRef}
+    >
       {player ? (
         <>
           <div className="player-info">

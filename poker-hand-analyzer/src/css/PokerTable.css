@@ -50,7 +50,7 @@
 }
 
 .table-inner.active {
-  border-color: #FFD700; /* Gold */
+  border-color: #FFD700;
   border-width: 3px;
 }
 
@@ -177,14 +177,14 @@
   }
 }
 
-.table-inner {
+/* .table-inner {
   position: relative;
   border-radius: 50%;
   transition: box-shadow 0.2s ease;
-}
+} */
 
 /* When an item is dragged over the board area */
-.table-inner.droppable-over {
+/* .table-inner.droppable-over {
   box-shadow: 0 0 25px 5px rgba(0, 255, 0, 0.4);
   transform: scale(1.02);
   transition: all 0.15s ease;
@@ -193,8 +193,8 @@
 .table-inner.hovered {
   box-shadow: 0 0 25px 5px rgba(0, 255, 0, 0.5);
   transition: box-shadow 0.2s ease;
-}
-
+} */
+/* 
 .table-inner {
   outline: 2px solid red;
   position: relative;
@@ -205,4 +205,29 @@
   outline: 2px dashed blue;
   position: relative;
   z-index: 1;
+} */
+
+/* .table-inner {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+} */
+
+/* .board-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 65%;
+  height: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+  pointer-events: none;
+} */
+
+.table-inner.hovered {
+  box-shadow: 0 0 25px 5px rgba(0, 255, 0, 0.5);
+  transition: box-shadow 0.2s ease;
 }

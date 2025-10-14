@@ -4,11 +4,20 @@
   justify-content: center;
   align-items: center;
   gap: 8px;
-  padding: 12px; /* important so gaps exist */
+  padding: 12px;
   border-radius: 8px;
-  /* background-color: yellow; */
   background-color: rgba(0, 80, 0, 0.4);
   z-index: 1;
+  
+  /* Inner table dashed border */
+  /* border: 2px dashed #CCCCCC;
+  cursor: pointer;
+  transition: border-color 0.3s ease; */
+}
+
+.board-area.active {
+  border-color: #FFD700;
+  border-width: 3px;
 }
 
 .board-slot {

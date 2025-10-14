@@ -20,19 +20,22 @@ const Hand = ({
   );
 
   // const { setNodeRef: setHandAreaRef, isOver: isOverHandArea } = useDroppable({
-  //   id: "player-hand-area",
+  //   id: `player-${seatNumber}-hand-area`,    
   //   data: "player-hand-area",
   //   // data: { type: "board-area" },
   // });
 
   return (
-    <div className="hand">
+    <div
+      className="hand"
+    >
       {slots.map((cardObj, index) => (
         <DroppableSlot
         // <DroppableBoardSlot
           key={index}
           index={index}
-          variant={`player-${seatNumber}`}
+          variant={"player"}
+          location={seatNumber}
           cardObj={cardObj}
           scale={scale}
           showSlots={showSlots}
@@ -40,21 +43,6 @@ const Hand = ({
           onCardClick={onCardClick}
           onSlotClick={onSlotClick}
         />
-        // <div 
-        //   key={index} 
-        //   className={`hand-slot ${activeSlot === index ? 'active-slot' : ''}`}
-        // >
-        //   <Card
-        //     card={cardObj ? cardObj.card : null}
-        //     scale={scale}
-        //     isHidden={cardObj?.hidden}
-        //     isSelected={cardObj?.selected}
-        //     isActiveTarget={activeSlot === index} 
-        //     showOutline={showSlots}
-        //     isClickable={true}
-        //     onClick={() => (cardObj ? onCardClick(index) : onSlotClick(index))}
-        //   />
-        // </div>
       ))}
     </div>
   );

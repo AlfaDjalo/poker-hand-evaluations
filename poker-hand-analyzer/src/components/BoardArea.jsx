@@ -8,6 +8,7 @@ const BoardArea = ({
   cards,
   scale,
   showSlots,
+  isActive=false,
   activeSlot, 
   onCardClick,
   onSlotClick, 
@@ -19,18 +20,6 @@ const BoardArea = ({
     cards[index] || null
   );
 
-  const { setNodeRef: setBoardAreaRef, isOver: isOverBoardArea } = useDroppable({
-    id: "board-area",
-    data: "board-area",
-    // data: { type: "board-area" },
-  });
-
-  // const { setNodeRef, isOver } = useDroppable({
-  //   id: "board-area",
-  //   data: { type: "board-area" },
-  //   disabled: cards.some(Boolean), // disable if there are slots/cards
-  // });
-
   React.useEffect(() => {
     console.log("BoardArea droppable mounted: board-area");
   }, []);
@@ -39,8 +28,7 @@ const BoardArea = ({
     // <div className="board-area" onClick={onAreaClick}>
 
     <div
-      ref={setBoardAreaRef}
-      className={`board-area ${isOverBoardArea ? "hovered" : ""}`}
+      className={`board-area ${isActive ? 'active' : ''}`}
       onClick={(e) => {
         // Detect clicks *not* on any child slot
         if (e.target === e.currentTarget) {
@@ -50,10 +38,10 @@ const BoardArea = ({
     >
       {slots.map((cardObj, index) => (
         <DroppableSlot
-        // <DroppableBoardSlot
           key={index}
           index={index}
           variant={"board"}
+          location={"main"}
           cardObj={cardObj}
           scale={scale}
           showSlots={showSlots}

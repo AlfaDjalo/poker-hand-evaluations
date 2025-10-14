@@ -206,23 +206,144 @@ const EquityCalculator = () => {
       return;
     }
 
-    const draggedCard = active.data.current?.card; // the card object
-    const targetId = over.id; // droppable id
-    console.log("Dragged card:", draggedCard, "Target ID:", targetId);
-
+    const draggedCard = active.data.current?.card;
+    const sourceData = active.data.current;
+    
+    const targetData = over.data.current;
+    const targetId = over.id;
     if (!draggedCard || !targetId) {
       console.log("No dragged card or target ID");
       return;
     }
 
+    console.log("Dragged card:", draggedCard, "Target ID:", targetId, "Source:", sourceData);
     console.log("🃏 Dropped", draggedCard, "on", targetId);
+    console.log("Target", targetData);
+
+    console.log("Source variant:", sourceData.variant);
+    console.log("Target variant:", targetData.variant);
+    // --- Move within component ---
+    if (sourceData.variant === targetData.variant) {
+      console.log("Swapping cards, variant: ", targetData.variant);
+      if (sourceData.variant === "board") {
+        setBoardCards(prev => {
+          const newBoard = [...prev];
+          // Save both cards first
+          const sourceCard = newBoard[sourceData.index];
+          const targetCard = newBoard[targetData.index];
+          console.log("Swapping cards:. Target card:", targetCard, "Source card:", sourceCard);
+          // Then swap
+          newBoard[sourceData.index] = targetCard;
+          newBoard[targetData.index] = sourceCard;
+          return newBoard
+        })
+      } else if (sourceData.variant === "player") {
+        const sourceSeat = sourceData.location
+        const sourceIndex = sourceData.index
+        const targetSeat = targetData.location
+        const targetIndex = targetData.index
+        const sourceCard = players[sourceSeat].hand[sourceIndex];
+        const targetCard = players[targetSeat].hand[targetIndex];
+        if (sourceSeat === targetSeat) {    
+          setPlayers(prev => {
+            const updated = { ...prev };
+            const hand = [...updated[sourceSeat].hand];
+            
+            // Swap cards in hand
+            [hand[sourceIndex], hand[targetIndex]] = 
+            [hand[targetIndex], hand[sourceIndex]];
+            
+            updated[sourceSeat] = { ...updated[sourceSeat], hand };
+            return updated;
+          });          
+        } else {
+          setPlayers(prev => {
+            const updated = { ...prev };
+            const sourceHand = [...updated[sourceSeat].hand];
+            const targetHand = [...updated[targetSeat].hand];
+            
+            // Swap cards in hand
+            [sourceHand[sourceIndex], targetHand[targetIndex]] = 
+            [targetHand[targetIndex], sourceHand[sourceIndex]];
+            
+            updated[sourceSeat] = { ...updated[sourceSeat], hand: sourceHand };
+            updated[targetSeat] = { ...updated[targetSeat], hand: targetHand };
+            return updated;
+          });          
+
+        }
+
+      }
+    } else if (  
+      (sourceData.variant === "board" && targetData.variant === "player") ||
+      (sourceData.variant === "player" && targetData.variant === "board")
+    )
+    {
+      console.log("Moving between board and hand")
+      const boardIndex = sourceData.variant === "board" 
+        ? sourceData.index 
+        : targetData.index;
+      const handSeat = sourceData.variant === "player" 
+        ? sourceData.location 
+        : targetData.location;
+      const handIndex = sourceData.variant === "player" 
+        ? sourceData.index 
+        : targetData.index;
+      
+      console.log("boardIndex:", boardIndex)
+      console.log("handSeat:", handSeat)
+      console.log("handIndex:", handIndex)
+
+      // Get both cards
+      const boardCard = boardCards[boardIndex];
+      const handCard = players[handSeat].hand[handIndex];
+      
+      // Update both states
+      setBoardCards(prev => {
+        const newBoard = [...prev];
+        newBoard[boardIndex] = handCard;
+        return newBoard;
+      });
+      
+      setPlayers(prev => {
+        const updated = { ...prev };
+        const hand = [...updated[handSeat].hand];
+        hand[handIndex] = boardCard;
+        updated[handSeat] = { ...updated[handSeat], hand };
+        return updated;
+      });
+    } else if (targetData.variant === "trash") {
+      console.log("🗑️ Dropped on trash area");
+
+      if (sourceData.variant === "board") {
+        setBoardCards(prev => {
+          const newBoard = [...prev];
+          newBoard[sourceData.index] = null; // or ""
+          return newBoard;
+        });
+      } else if (sourceData.variant === "player") {
+        setPlayers(prev => {
+          const updated = { ...prev };
+          const seat = sourceData.location;
+          // const seat = sourceData.location.seat;
+          const hand = [...updated[seat].hand];
+          hand[sourceData.index] = null; // or ""
+          updated[seat] = { ...updated[seat], hand };
+          return updated;
+        });
+      }
+    }
+
 
     // --- Player slot drop ---
-    if (targetId.startsWith("player-") && targetId.includes("slot")) {
+    // if (targetId.startsWith("player-") && targetId.includes("slot")) {
+    if (targetData.variant === "player") {
       // format: "player-{seat}-slot-{slotIndex}"
-      const [, seatStr, , slotStr] = targetId.split("-");
-      const seat = Number(seatStr);
-      const slotIndex = Number(slotStr);
+      const seat = targetData.location
+      const slotIndex = targetData.index
+      // const [, seatStr, , slotStr] = targetId.split("-");
+      // const seat = Number(seatStr);
+      // const slotIndex = Number(slotStr);
       handleCardDropToPlayer(draggedCard, seat, slotIndex);
       return;
     }
@@ -242,12 +363,15 @@ const EquityCalculator = () => {
     }
 
     // --- Board slot drop ---
-    if (targetId.startsWith("board-slot")) {
+    if (targetData.variant === "board") {
+    // if (targetId.startsWith("board-slot")) {
       // format: "board-slot-{index}"
-      const [, , slotStr] = targetId.split("-");
-      const slotIndex = Number(slotStr);
+      // const board = targetData.location
+      const slotIndex = targetData.index
+      // const [, , slotStr] = targetId.split("-");
+      // const slotIndex = Number(slotStr);
       handleCardDropToBoard(draggedCard, slotIndex);
-      return;
+      // return;
     }
 
     // --- Board area drop (no specific slot) ---
@@ -257,13 +381,13 @@ const EquityCalculator = () => {
       return;
     }
 
-    // if (targetId === "board-area") {
-    //   const emptyIndex = boardCards.findIndex((c) => !c);
-    //   if (emptyIndex !== -1) {
-    //     handleCardDropToBoard(draggedCard, emptyIndex);
-    //   }
-    //   return;
-    // }
+    if (targetId === "board-area") {
+      const emptyIndex = boardCards.findIndex((c) => !c);
+      if (emptyIndex !== -1) {
+        handleCardDropToBoard(draggedCard, emptyIndex);
+      }
+      return;
+    }
   };
 
   const handleDropToBoard = (card, slotIndex) => {
@@ -274,97 +398,13 @@ const EquityCalculator = () => {
       return newBoard;
     });
   };
-
-
-
-  // const handleDragEnd = (event) => {
-  //   const { active, over } = event;
-
-  //   if (!over) return; // dropped outside any droppable
-
-  //   const draggedCard = active.data.current?.card; // the card object
-  //   const targetId = over.id; // droppable id
-
-  //   if (!draggedCard || !targetId) return;
-
-  //   // --- Player slot drop ---
-  //   if (targetId.startsWith("player") && targetId.includes("slot")) {
-  //     // format: "player-{seat}-slot-{slotIndex}"
-  //     const [, seatStr, , slotStr] = targetId.split("-");
-  //     const seat = Number(seatStr);
-  //     const slotIndex = Number(slotStr);
-  //     handleCardDropToPlayer(draggedCard, seat, slotIndex);
-  //     return;
-  //   }
-
-  //   // --- Player area drop (no specific slot) ---
-  //   if (targetId.startsWith("player-area")) {
-  //     // format: "player-area-{seat}"
-  //     const [, , seatStr] = targetId.split("-");
-  //     const seat = Number(seatStr);
-
-  //     // find first empty slot in this player's hand
-  //     const hand = players[seat].hand;
-  //     const emptyIndex = hand.findIndex((c) => !c);
-  //     if (emptyIndex !== -1) {
-  //       handleCardDropToPlayer(draggedCard, seat, emptyIndex);
-  //     }
-  //     return;
-  //   }
-
-  //   // --- Board slot drop ---
-  //   if (targetId.startsWith("board-slot")) {
-  //     // format: "board-slot-{index}"
-  //     const [, , slotStr] = targetId.split("-");
-  //     const slotIndex = Number(slotStr);
-  //     handleCardDropToBoard(draggedCard, slotIndex);
-  //     return;
-  //   }
-
-  //   // --- Board area drop (no specific slot) ---
-  //   if (targetId === "board-area") {
-  //     const emptyIndex = boardCards.findIndex((c) => !c);
-  //     if (emptyIndex !== -1) {
-  //       handleCardDropToBoard(draggedCard, emptyIndex);
-  //     }
-  //     return;
-  //   }
-  // };
-
-  // const handleDragEnd = (event) => {
-  //   const { active, over } = event;
-
-  //   if (!over) return; // dropped outside any droppable
-
-  //   const draggedCard = active.data.current?.card; // the card object
-  //   const targetId = over.id; // droppable id, e.g., "player-1-slot-2" or "board-slot-0"
-
-  //   if (!draggedCard || !targetId) return;
-
-  //   if (targetId.startsWith("player")) {
-  //     // player slot id format: "player-{seat}-slot-{slotIndex}"
-  //     const [, seatStr, , slotStr] = targetId.split("-");
-  //     const seat = Number(seatStr);
-  //     const slotIndex = Number(slotStr);
-  //     handleCardDropToPlayer(draggedCard, seat, slotIndex);
-  //   }
-
-  //   if (targetId.startsWith("board")) {
-  //     // board slot id format: "board-slot-{index}"
-  //     const [, , slotStr] = targetId.split("-");
-  //     const slotIndex = Number(slotStr);
-  //     handleCardDropToBoard(draggedCard, slotIndex);
-  //   }
-  // };
-
-
+  
   // Collect all used cards from all player hands and the board
   const usedCards = [
     ...Object.values(players)
       .flatMap(player => player.hand.filter(Boolean).map(c => c.card)), 
     ...boardCards.filter(Boolean).map(c => c.card)
   ];
-
 
   return (
     <DndContext
