@@ -46,29 +46,63 @@ async def evaluate(req: HandRequest):
         print(req.playerHands)
         print(req.board)
 
-        # player_hands = [[normalize_card(c) for c in hand if c] for hand in req.playerHands]
-        # board = [normalize_card(c) for c in (req.board or []) if c]
-
-        # print(player_hands)
-        # print(board)
-
         player_hands = prepare_player_hands(req.playerHands)
         board = [normalize_card(c) for c in (req.board or []) if c and c.strip()]
 
         print("Filtered player hands:", player_hands)
         print("Filtered board:", board)
 
-        # equities = equity_wrapper.compute_equity(player_hands, board)
+        # compute_equity now returns a dict with keys: 'equities', 'wins', 'ties', 'total_hands', 'exact'
+        result = compute_calc(player_hands, board, debug=True)
+        # result = equity_wrapper.compute_equity(player_hands, board, debug=True)
+        
+        # For debugging, you can log the full result
+        print("Full result:", result)
+        print(f"Total hands evaluated: {result['total_hands']}")
+        print(f"Wins: {result['wins']}")
+        print(f"Ties: {result['ties']}")
 
-        equities = compute_calc(player_hands, board)
-
-        print(equities)
-
-        return {"equities": equities}
+        # Return only equities to the API client
+        return {"equities": result['equities']}
 
     except Exception as e:
         print(f"Error: {e}")
         return {"error": str(e)}
+    
+# @app.post("/evaluate")
+# async def evaluate(req: HandRequest):
+#     """
+#     hands_list: list of list of strings, e.g. [["As", "Kd"], ["Qh", "Qc"]]
+#     board_cards: list of strings, e.g. ["2c", "7d", "9h"]
+#     """
+#     print("In evaluate API")
+#     try:
+#         print(req.playerHands)
+#         print(req.board)
+
+#         # player_hands = [[normalize_card(c) for c in hand if c] for hand in req.playerHands]
+#         # board = [normalize_card(c) for c in (req.board or []) if c]
+
+#         # print(player_hands)
+#         # print(board)
+
+#         player_hands = prepare_player_hands(req.playerHands)
+#         board = [normalize_card(c) for c in (req.board or []) if c and c.strip()]
+
+#         print("Filtered player hands:", player_hands)
+#         print("Filtered board:", board)
+
+#         # equities = equity_wrapper.compute_equity(player_hands, board)
+
+#         equities = compute_calc(player_hands, board, debug=True)
+
+#         print(equities)
+
+#         return {"equities": equities}
+
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         return {"error": str(e)}
 
 
 async def evaluate_old(req: HandRequest):

@@ -17,6 +17,7 @@ ext_modules = [
     Pybind11Extension(
         "equity_wrapper",
         ["equity_wrapper.cpp",
+        "omaha_equity.cpp",
         "../OMPEval/omp/CardRange.cpp",
         "../OMPEval/omp/CombinedRange.cpp",
         "../OMPEval/omp/EquityCalculator.cpp",
