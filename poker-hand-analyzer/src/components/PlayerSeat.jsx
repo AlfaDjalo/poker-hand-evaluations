@@ -38,7 +38,7 @@ const PlayerSeat = ({
         <>
           <div className="player-info">
             <span className="player-name">{player.name}</span>
-            <span className="player-chips">${player.chips}</span>
+            <span className="player-stack">${player.stack}</span>
           </div>
           <Hand 
             seatNumber={seatNumber}

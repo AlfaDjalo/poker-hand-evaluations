@@ -3,10 +3,13 @@ import React, { useState } from 'react';
 import PokerTable from "./PokerTable";
 // import { makeDeck, shuffleDeck, deal } from "../utils/deckUtils";
 import { createNewHand, dealHoleCards } from "../utils/handUtils";
+import { dealBoardCards } from "../utils/boardUtils";
 
 const GameSimulator = () =>
 {
     const [hand, setHand] = useState(null);
+
+    const numBoardCards = [0, 3, 1, 1];
 
     const handleNewHand = () => {
         const newHand = createNewHand({ numPlayers: 6, startingStack: 200, numCards: 4 });
@@ -20,6 +23,18 @@ const GameSimulator = () =>
         console.log("Dealt hand: ", Object.values(dealt.players).map(p => ({ seat: p.seat, hand: p.hand })));
     };
 
+    const handleDealBoard = () => {
+        if (!hand) return;
+        const nextStreet = hand.street + 1;
+        if (nextStreet > numBoardCards.length - 1) return;
+        const numCards = numBoardCards[nextStreet] || 0; 
+        const newHand = { ...hand, street: nextStreet };
+        const updated = dealBoardCards(newHand, numCards);
+        setHand({ ...updated });
+
+        console.log("Updated board: ", Object.values(updated.board));
+    }
+
     // const handleDealBoard = () => {
     //     if (!hand) return;
     //     const dealt = dealBoardCards(hand, 3);
@@ -28,17 +43,20 @@ const GameSimulator = () =>
     // };
 
     return (
-        <div Style={{ padding: 16 }}>
+        <div style={{ padding: 16 }}>
             <h3> Game Simulator </h3>   
             <button onClick={ handleNewHand }>Create New Hand</button>
             <button onClick={ handleDeal }>Deal Hole Cards</button>
+            <button onClick={ handleDealBoard }>Deal Next Street</button>
 
             {/* <PokerTable
                 players={hand.players}
                 boardCards={hand.board}
                 dealerSeat={1}
             /> */}
-
+            
+            { console.log("Rendering PokerTable, boardCards =", hand?.board)}
+            
             <PokerTable
             players={hand ? hand.players : {}}
             boardCards={hand ? hand.board : []}

@@ -22,7 +22,7 @@ export function createNewHand({ numPlayers=6, startingStack=200, numCards=4 }={}
         deck,
         board: [],
         pot: 0,
-        street: "pre-flop",
+        street: 0,
         dealer: 1,
     };
 }

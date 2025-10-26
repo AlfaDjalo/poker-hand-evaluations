@@ -12,12 +12,14 @@
 .player-name {
   font-weight: bold;
   margin-bottom: 0.2rem;
+  text-align: left;
 }
 
-.player-chips {
+.player-stack {
   font-size: 0.7rem;
   margin-bottom: 0.3rem;
   color: #ffd700; /* goldish for chips */
+  text-align: right;
 }
 
 .player-hand-placeholder {
@@ -42,4 +44,10 @@
   font-size: 0.9rem;
   color: #fff;
   text-align: center;
+}
+
+.player-info {
+  display: flex;
+  justify-content: space-between; /* pushes the spans to opposite ends */
+  width: 100%; /* make sure it spans the container */
 }

@@ -8,9 +8,9 @@ import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 const EquityCalculator = () => {
   // Players with empty hands
   const [players, setPlayers] = useState({
-    1: { name: "Alice", chips: 1500, hand: [null, null, null, null] },
-    2: { name: "Bob", chips: 1200, hand: [null, null, null, null] },
-    3: { name: "Charlie", chips: 2000, hand: [null, null, null, null] },
+    1: { name: "Alice", stack: 1500, hand: [null, null, null, null] },
+    2: { name: "Bob", stack: 1200, hand: [null, null, null, null] },
+    3: { name: "Charlie", stack: 2000, hand: [null, null, null, null] },
   });
   
   const [boardCards, setBoardCards] = useState([null, null, null, null, null]);
