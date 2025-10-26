@@ -56,6 +56,17 @@ export const Navbar = ( {menuOpen, setMenuOpen} ) => {
                         >
                             Equity Calculator
                         </NavLink>
+
+                        <NavLink
+                            to="/game_simulator"
+                            className={({ isActive }) =>
+                                isActive
+                                ? "text-white font-semibold"
+                                : "text-gray-300 hover:text-white transition-colors"
+                            }
+                        >
+                            Game Simulator
+                        </NavLink>
                     </div>
                 </div>
             </div>
