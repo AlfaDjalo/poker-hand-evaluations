@@ -69,73 +69,32 @@ async def evaluate(req: HandRequest):
         print(f"Error: {e}")
         return {"error": str(e)}
     
-# @app.post("/evaluate")
-# async def evaluate(req: HandRequest):
-#     """
-#     hands_list: list of list of strings, e.g. [["As", "Kd"], ["Qh", "Qc"]]
-#     board_cards: list of strings, e.g. ["2c", "7d", "9h"]
-#     """
-#     print("In evaluate API")
-#     try:
-#         print(req.playerHands)
-#         print(req.board)
-
-#         # player_hands = [[normalize_card(c) for c in hand if c] for hand in req.playerHands]
-#         # board = [normalize_card(c) for c in (req.board or []) if c]
-
-#         # print(player_hands)
-#         # print(board)
-
-#         player_hands = prepare_player_hands(req.playerHands)
-#         board = [normalize_card(c) for c in (req.board or []) if c and c.strip()]
-
-#         print("Filtered player hands:", player_hands)
-#         print("Filtered board:", board)
-
-#         # equities = equity_wrapper.compute_equity(player_hands, board)
-
-#         equities = compute_calc(player_hands, board, debug=True)
-
-#         print(equities)
-
-#         return {"equities": equities}
-
-#     except Exception as e:
-#         print(f"Error: {e}")
-#         return {"error": str(e)}
-
-
-async def evaluate_old(req: HandRequest):
-    print("In evaluate API")
+@app.post("/showdown")
+async def showdown(req: HandRequest):
+    """
+    hands_list: list of list of strings, e.g. [["As", "Kd"], ["Qh", "Qc"]]
+    board_cards: list of strings, e.g. ["2c", "7d", "9h"]
+    """
+    print("In showdown API")
     try:
-        db = open_db()
-
         print(req.playerHands)
         print(req.board)
 
-        player_hands = [[normalize_card(c) for c in hand if c] for hand in req.playerHands]
-        board = [normalize_card(c) for c in (req.board or []) if c]
+        player_hands = prepare_player_hands(req.playerHands)
+        board = [normalize_card(c) for c in (req.board or []) if c and c.strip()]
 
-        print(player_hands)
-        print(board)
+        print("Filtered player hands:", player_hands)
+        print("Filtered board:", board)
 
-        equities = calculate_equity_for_multiple_hands_exhaustive(
-            db=db,
-            player_hands=player_hands,
-            board=board,
-            # player_hands=req.playerHands,
-            # board=req.board,
-            debug=True  # optional
-        )
+        result = compute_calc(player_hands, board, debug=True)
+        # result = compute_showdown(player_hands, board, debug=True)
 
-        print(f"equities: {equities}")
-
-        return {"equities": equities}
+        return {"equities": result['equities']}
 
     except Exception as e:
         print(f"Error: {e}")
         return {"error": str(e)}
-
+    
 def normalize_card(card: str) -> str:
     """Convert rank to uppercase, suit to lowercase (e.g., 'as' -> 'As')."""
     if not card or len(card) < 2:

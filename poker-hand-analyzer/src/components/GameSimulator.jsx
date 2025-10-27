@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 
 import PokerTable from "./PokerTable";
-// import { makeDeck, shuffleDeck, deal } from "../utils/deckUtils";
 import { createNewHand, dealHoleCards } from "../utils/handUtils";
 import { dealBoardCards } from "../utils/boardUtils";
+import { evaluateShowdown } from "../utils/api";
 
 const GameSimulator = () =>
 {
     const [hand, setHand] = useState(null);
+    const [showdownResult, setShowdownResult] = useState(null);
 
     const numBoardCards = [0, 3, 1, 1];
 
@@ -35,12 +36,36 @@ const GameSimulator = () =>
         console.log("Updated board: ", Object.values(updated.board));
     }
 
-    // const handleDealBoard = () => {
-    //     if (!hand) return;
-    //     const dealt = dealBoardCards(hand, 3);
-    //     // setHand(dealt);
-    //     // console.log("Dealt hand: ", dealt.players.map(p => ({ seat: p.seat, hand: p.hand })));
-    // };
+    const handleShowdown = async () => {
+        if (!hand) return;
+        if (hand.street < numBoardCards.length - 1) return;
+
+        const playerHands = Object.values(hand.players).map(p => ( p.hand.map(c => c.card) ));
+        const board = hand.board.map(c => c.card);
+
+        console.log("Showdown");
+
+        try {
+            const result = await evaluateShowdown(playerHands, board);
+
+            console.log(result);
+
+            const seats = Object.keys(hand.players);
+            const updatedPlayers = { ...hand.players };
+            seats.forEach((seat, idx) => {
+                updatedPlayers[seat] = {
+                    ...updatedPlayers[seat],
+                    equity: result.equities[idx] * 100
+                };
+            });
+
+            setHand(prev => ({ ...prev, players: updatedPlayers }));
+            setShowdownResult(result.equities);
+            console.log("Showdown result: ", result);
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
     return (
         <div style={{ padding: 16 }}>
@@ -48,13 +73,8 @@ const GameSimulator = () =>
             <button onClick={ handleNewHand }>Create New Hand</button>
             <button onClick={ handleDeal }>Deal Hole Cards</button>
             <button onClick={ handleDealBoard }>Deal Next Street</button>
+            <button onClick={ handleShowdown }>Showdown</button>
 
-            {/* <PokerTable
-                players={hand.players}
-                boardCards={hand.board}
-                dealerSeat={1}
-            /> */}
-            
             { console.log("Rendering PokerTable, boardCards =", hand?.board)}
             
             <PokerTable
@@ -79,18 +99,14 @@ const GameSimulator = () =>
             loading={false}
             />
 
-            {/* <div style={{ marginTop: 16 }}>
-                <pre style={{ maxHeight:300, overflow: "auto" }}>
-                    {hand && hand.players ? JSON.stringify({
-                        players:  Object.values(hand.players).map(p => ({ seat: p.seat, hand: p.hand, stack: p.stack })),
-                        // players: hand.players.map(p => ({ seat: p.seat, hand: p.hand, stack: p.stack })),
-                        deckRemaining: hand.deck.length,
-                        board: hand.board,
-                        pot: hand.pot,
-                        street: hand.street,
-                    }, null, 2) : "No hand yet."}
-                </pre>
-            </div> */}
+            <div>
+                {showdownResult && Object.keys(hand.players).map((seat, idx) => (
+                    <div key={seat} style={{ fontWeight: showdownResult[idx] > 0 ? "bold" : "normal" }}>
+                        Player {seat}: {hand.players[seat].hand.map(c => c.card).join(" ")}
+                        {showdownResult[idx] === 1 ? " (Winner)" : showdownResult[idx] > 0 ? " (Tie)" : ""}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

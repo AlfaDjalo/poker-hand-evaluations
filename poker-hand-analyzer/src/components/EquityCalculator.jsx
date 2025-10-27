@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import CardSelector from './CardSelector';
 import PokerTable from './PokerTable';
-import { evaluateHand } from "../api";
+import { evaluateHand } from "../utils/api";
 import "../css/EquityCalculator.css";
 import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 
