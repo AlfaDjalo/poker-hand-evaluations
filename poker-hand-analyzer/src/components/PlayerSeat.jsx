@@ -50,7 +50,7 @@ const PlayerSeat = ({
             onSlotClick={onSlotClick}
             maxCards={4}
           />
-          {console.log("Rendering PlayerSeat", seatNumber, player)}
+          {/* {console.log("Rendering PlayerSeat", seatNumber, player)} */}
 
           {!loading && player.equity !== undefined && (
             <div className="player-equity">

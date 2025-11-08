@@ -290,9 +290,9 @@ const EquityCalculator = () => {
         ? sourceData.index 
         : targetData.index;
       
-      console.log("boardIndex:", boardIndex)
-      console.log("handSeat:", handSeat)
-      console.log("handIndex:", handIndex)
+      // console.log("boardIndex:", boardIndex)
+      // console.log("handSeat:", handSeat)
+      // console.log("handIndex:", handIndex)
 
       // Get both cards
       const boardCard = boardCards[boardIndex];

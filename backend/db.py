@@ -4,6 +4,7 @@ import json
 import os
 import io
 import csv
+import random
 
 CONFIG_FILE = "config.json"
 
@@ -327,6 +328,22 @@ class DB:
         return count
 
     
+    def get_sample_evaluations(self, batch_size: int):
+        self.cursor.execute("SELECT MIN(evaluation_id), MAX(evaluation_id) FROM evaluations;")
+        min_id, max_id = self.cursor.fetchone()
+
+        random_ids = random.sample(range(min_id, max_id+1), batch_size)
+
+        self.cursor.execute(
+            "SELECT * FROM evaluations WHERE evalutation_id = ANY(%s)';",
+            (random_ids,)
+        )
+        rows = self.cursor.fetchall()
+
+        print(f"✅ Returned {len(rows)} evaluations")
+        return rows
+
+
     def close(self):
         if self.cursor:
             self.cursor.close()

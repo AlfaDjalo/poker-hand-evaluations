@@ -23,9 +23,9 @@ const DroppableSlot = ({
     }
   });
 
-  React.useEffect(() => {
-    console.log(`DroppableSlot mounted: ${variant}-slot-${index}`);
-  }, [index]);
+  // React.useEffect(() => {
+  //   console.log(`DroppableSlot mounted: ${variant}-slot-${index}`);
+  // }, [index]);
 
   return (
     <div

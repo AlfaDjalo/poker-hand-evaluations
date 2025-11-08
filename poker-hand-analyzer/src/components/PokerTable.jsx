@@ -9,6 +9,7 @@ const PokerTable = ({
   boardCards,
   dealerSeat,
   activeTarget,
+  actionSeat=1,
   onSeatClick,
   onPlayerCardClick,
   onPlayerSlotClick,
@@ -55,7 +56,10 @@ const PokerTable = ({
         {Array.from({ length: 6 }, (_, i) => {
           const seatNum = i + 1;
           return (
-            <div key={seatNum} className={`seat seat-${seatNum}`}>
+            <div 
+              key={seatNum}
+              className={`seat seat-${seatNum} ${seatNum === actionSeat ? "border-4 border-yellow-400" : "border border-gray-500"} rounded-full p-2`}
+            >
               <PlayerSeat
                 // key={seatNum}
                 seatNumber={seatNum}
@@ -71,7 +75,7 @@ const PokerTable = ({
           );
         })}
       </div>
-    // </div>
+    </div>
   );
 };
 

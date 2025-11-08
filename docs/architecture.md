@@ -3,6 +3,7 @@
 The project consists of:
 - **Backend** (Python) -> handles API, data processing, ML models
 - **Frontend** (React, Vite, Tailwind) -> handles UI, charting, feature selection
+- **Model** (Python) -> extracts sample data, trains model
 - **Deployment** static frontend hosted on GitHub pages, backend hosted separately
 
 ```mermaid

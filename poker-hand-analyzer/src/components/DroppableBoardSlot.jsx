@@ -16,9 +16,9 @@ const DroppableBoardSlot = ({
     data: { index },
   });
 
-  React.useEffect(() => {
-    console.log(`DroppableBoardSlot mounted: board-slot-${index}`);
-  }, [index]);
+  // React.useEffect(() => {
+  //   console.log(`DroppableBoardSlot mounted: board-slot-${index}`);
+  // }, [index]);
 
   return (
     <div

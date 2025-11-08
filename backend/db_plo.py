@@ -4,6 +4,7 @@ import json
 import os
 import io
 import csv
+import random
 
 CONFIG_FILE = "config.json"
 
@@ -447,6 +448,14 @@ class DB_PLO:
         print(f"✅ Table has {count:,} rows")
         return count
 
+    def get_sample_evaluations(self, batch_size: int):
+        self.cursor.execute(f"SELECT * FROM plo_evaluations_bm ORDER BY RANDOM() LIMIT {batch_size};")
+        rows = self.cursor.fetchall()
+
+        print(f"✅ Returned {len(rows)} evaluations")
+        return rows
+
+
     def get_boards_with_card(self, card_str, suit_pattern=None):
         if suit_pattern is not None:
             self.cursor.execute(
@@ -530,7 +539,11 @@ def load_db_config(config_path="config.json"):
     Returns:
         Dictionary of config elements loaded from json file.
     """
+    if not os.path.isabs(config_path):
+        config_path = os.path.join(os.path.dirname(__file__), config_path)
+
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Database config file '{config_path}' not found.")
+
     with open(config_path, "r") as f:
         return json.load(f)
