@@ -48,7 +48,8 @@ def create_tensor_grids(rows):
                 board_grid[rank][suit] = 1
                 full_grid[rank][suit] = 1
 
-        combined = np.stack([hand_grid, board_grid, full_grid], axis=-1)
+        combined = np.stack([hand_grid, board_grid], axis=-1)
+        # combined = np.stack([hand_grid, board_grid, full_grid], axis=-1)
         inputs.append(combined)
         labels.append((high_value - 1) / 7461.0)
         # labels.append(high_value)
