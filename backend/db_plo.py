@@ -1,10 +1,11 @@
-import psycopg2
-from psycopg2.extras import execute_values
 import json
 import os
 import io
 import csv
 import random
+
+import psycopg2
+from psycopg2.extras import execute_values
 
 CONFIG_FILE = "config.json"
 
@@ -58,7 +59,7 @@ class DB_PLO:
                     PRIMARY KEY (board_id, hand_id)
                     );
                     """)
-        
+
         self.cursor.execute("""
                     CREATE TABLE IF NOT EXISTS plo_evaluations_bm (
                         hand_mask BIGINT,
@@ -72,7 +73,7 @@ class DB_PLO:
         print("🛠️ Created PLO tables")
 
         return
-    
+
     def remove_indices_from_evaluations(self):
         """
         Function to remove indices from plo_evaluations table.
@@ -143,7 +144,7 @@ class DB_PLO:
             INSERT INTO plo_evaluations (board_id, hand_id, high_value, low_value)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (board_id, hand_id) DO NOTHING;
-        """, (board_id, hand_id, hand_value, rank_dense))
+        """, (board_id, hand_id, high_value, low_value))
         print("📥 Inserted evaluation data")
 
 
@@ -168,9 +169,9 @@ class DB_PLO:
             "SELECT board_id, board_str FROM plo_boards WHERE board_str = ANY(%s);",
             (all_board_strs,)
         )
-    
+
         rows = self.cursor.fetchall()
-    
+
         board_id_map = {board_str: board_id for board_id, board_str in rows}
 
         print(f"✅ Inserted {len(board_id_map)} new boards")
@@ -209,10 +210,10 @@ class DB_PLO:
         board_id_map = {
                 f"{r[1]}{r[2]}{r[3]}": r[0] for r in rows
             }
-        
+
         print(f"✅ Inserted {len(board_id_map)} new boards")
         return board_id_map
-    
+
 
     def bulk_insert_evaluations(self, data, chunk_size=5000000):
         # data: list of tuples [(board_id, hand_id, hand_value, rank_min, rank_max, rank_avg, rank_dense), ...]
@@ -240,7 +241,6 @@ class DB_PLO:
             )
             print(f"✅ COPY inserted {len(chunk)} plo_evaluations_bm (rows {i+1}-{min(i+chunk_size, total)})")
         return
-
 
 
     # Query / Utility Methods

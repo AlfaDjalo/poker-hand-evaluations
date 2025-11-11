@@ -8,46 +8,49 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend")))
 
 from db_plo import DB_PLO, open_db
-from data.db_loader import data_generator
-from models.implementation import PokerCNNEncoder, PokerComboModel, PokerValueModel, SuitEquivariantLayer, PokerValueHeads
+from data.db_loader import data_generator, data_generator_3_heads
+from data.generators import AbsoluteGenerator, PairwiseGenerator
+from models.implementation import PokerCNNEncoder, PokerComboModel, PokerValueModel, SuitEquivariantLayer, PokerValueHeads, ComboConcatLayer
+from models.utils import save_model, load_model
+from training.evaluation import evaluate_model
+from training.trainer import train_embeddings
+from config import get_config
 
-def main():
-    db = open_db()
-    # data = data_generator(db, db_batch_size=32000, model_batch_size=64)
-    pre_data = data_generator(db, db_batch_size=32000, model_batch_size=64)
-    data = wrapped_generator(pre_data)
-    
+def wrapped_generator(gen):
+    for x, y in gen:
+        yield x, (y, y, y)
+
+def build_model():
     inputs = tf.keras.Input(shape=(13, 4, 2))
-
+    
     # --- Split and combine grids ---
     hand = inputs[..., 0:1]         # (batch, 13, 4, 1)
     board = inputs[..., 1:2]        # (batch, 13, 4, 1)
-    combo = Lambda(lambda x:ops.concatenate([x[0], x[1], x[0]+x[1]], axis=-1))([hand, board])
-    # combo_input = tf.concat(
-    #     [hand, board, hand + board], axis=-1
-    # )                                # (batch, 13, 4, 3)
+    combo = ComboConcatLayer()([hand, board])
+    # combo = Lambda(lambda x:ops.concatenate([x[0], x[1], x[0]+x[1]], axis=-1), output_shape=(13, 4, 3))([hand, board])
 
     encoder = PokerComboModel(embedding_dim=32)
     value_heads = PokerValueHeads(encoder, activation="sigmoid")
 
     hand_v, board_v, combined_v = value_heads([hand, board, combo], training=True, return_all=True)
 
-    # value_model = PokerValueModel(encoder.combined_encoder, activation="sigmoid")
-    # value_output = value_model(combo, training=True)
-
     model = tf.keras.Model(inputs=inputs, outputs=[hand_v, board_v, combined_v])
     model.compile(optimizer="adam", loss=["mse", "mse", "mse"], loss_weights=[0.3, 0.3, 0.4], metrics=["mae", "mae", "mae"])  # include metric
 
+    return model
+
+
+def train_model(model, data, epochs=100, steps_per_epoch=500):
     # Training
     model.fit(
         data,
-        steps_per_epoch=500,
-        epochs=100,
+        steps_per_epoch=steps_per_epoch,
+        epochs=epochs,
         verbose=1
-    )
+    )    
+    return model
 
-    # --- Evaluation Section ---
-    # 1️⃣ Get a fresh random batch for evaluation
+def evaluate_model_old(model, data):
     x_eval, y_eval = next(data)
 
     # 2️⃣ Run predictions
@@ -76,82 +79,47 @@ def main():
     print(f"  MAE (combo): {mae_combo:.6f}")
     print(f"  Correlation (combo): {corr_combo:.4f}")
 
-    # mse = tf.keras.losses.MeanSquaredError()(y_eval, y_pred).numpy().item()
-    # mae = tf.keras.losses.MeanAbsoluteError()(y_eval, y_pred).numpy().item()
-    # corr = np.corrcoef(y_eval[0].numpy().squeeze(), y_pred[0].squeeze())[0, 1]
+    return 
 
-    # # 3️⃣ Compute and print summary stats
-    # # mse = tf.keras.losses.MeanSquaredError()(y_eval, y_pred).numpy().item()
-    # # mae = tf.keras.losses.MeanAbsoluteError()(y_eval, y_pred).numpy().item()
-    # # corr = np.corrcoef(y_eval.squeeze(), y_pred.squeeze())[0, 1]
+def main():
 
-    # print("\n📊 Evaluation Results:")
-    # print(f"  MSE: {mse:.6f}")
-    # print(f"  MAE: {mae:.6f}")
-    # print(f"  Correlation: {corr:.4f}")
+    # load_model_from_file = True
+    # save_model_to_file = True
+    # training_mode = "pairwise" # "absolute_value"
 
-    # --- Optional: inspect embeddings ---
-    hand = x_eval[..., 0:1]
-    board = x_eval[..., 1:1+1]
-    combo = Lambda(lambda x:ops.concatenate([x[0], x[1], x[0]+x[1]], axis=-1))([hand, board])
-    # combo_input = np.concatenate([hand, board, hand + board], axis=-1)
+    config = get_config()
+    model = train_embeddings(mode=config["mode"], config=config)
     
-    # hand_emb, board_emb, combined_emb = encoder(inputs, training=True, return_all=True)
+    # --- Evaluate after training ---
+    print("\n🔍 Running post-training evaluation...")
+    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config)
+    evaluate_model(model, iter(eval_gen))
+
+    # evaluate_model(model, data)
+
+    # db = open_db()
+    # data = data_generator(db, db_batch_size=32000, model_batch_size=64)
+    # if training_mode == "pairwise":
+    #     data = data_generator_pairs(db, db_batch_size=32000, model_batch_size=64)
+    # else:        
+    #     data = data_generator_3_heads(db, db_batch_size=32000, model_batch_size=64)
     
-    combined_encoder = encoder.combined_encoder
-    combined_embeddings = combined_encoder.predict(combo, batch_size=64)
-    print("\nCombined Embedding sample shape:", combined_embeddings.shape)
-    print("First embedding vector:", np.array2string(combined_embeddings[0], precision=2))
+    # if load_model_from_file == True:
+    #     base_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from training/
+    #     path = os.path.join(base_dir, "models", "saved", "poker_value_model.keras")
+    #     # model_path = 'models/saved/poker_value_model.keras'
+    #     model = load_model(path)
+    #     print("✅ Model loaded successfully.")
+    # else:
+    #     model = build_model()
+    
+    # model = train_model(model, data, epochs=100, steps_per_epoch=500)
+    # evaluate_model(model, data)
 
-    hand_encoder = encoder.hand_encoder
-    hand_embeddings = hand_encoder.predict(hand, batch_size=64)
-    print("\nHand Embedding sample shape:", hand_embeddings.shape)
-    print("First embedding vector:", np.array2string(hand_embeddings[0], precision=2))
-
-    board_encoder = encoder.board_encoder
-    board_embeddings = board_encoder.predict(board, batch_size=64)
-    print("\nBoard Embedding sample shape:", board_embeddings.shape)
-    print("First embedding vector:", np.array2string(board_embeddings[0], precision=2))
-
-    num_samples = min(25, y_eval[0].shape[0])
-    idx = np.random.choice(num_samples, num_samples, replace=False)
-    # idx = np.random.choice(len(y_eval), num_samples, replace=False)
-
-    print("\nSample predictions vs actuals:")
-    for i in idx:
-        # print(f"  {i:3d}: predicted={int(1 + 7461*y_pred[i][0])}, actual={int(1+7461*y_eval[i][0])}")
-        print(f"  {i:3d}: predicted={int(1 + 7461 * y_pred[2][i][0])}, actual={int(1 + 7461 * y_eval[2][i][0])}")
-
-
-
-    # model.save("models/poker_value_model.keras")
-    # encoder.save("models/poker_encoder.keras")
-
-    # np.save("embeddings_sample.npy", embeddings)
-
-
-
-def wrapped_generator(gen):
-    for x, y in gen:
-        yield x, (y, y, y)
-# def main():
-
-#     db = open_db()
-#     data = data_generator(db, db_batch_size=10, model_batch_size=3)
-
-#     encoder = PokerCNNEncoder(input_shape=(13, 4, 1))
-#     model = PokerValueModel(encoder, activation="sigmoid")
-
-#     model.compile(optimizer="adam", loss="mse")
-
-#     model.fit(data, steps_per_epoch=100, epochs=5)
-
-#     x_batch, _ = next(data)
-#     embeddings = encoder.predict(x_batch)
-
-#     print("Embeddings shape:", embeddings.shape)
-#     print(embeddings[:2])
-
+    # if save_model_to_file == True:
+    #     base_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from training/
+    #     path = os.path.join(base_dir, "models", "saved", "poker_value_model.keras")
+    #     save_model(model, path)
 
 
 if __name__ == "__main__":

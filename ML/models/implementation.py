@@ -1,21 +1,29 @@
 import itertools
 import tensorflow as tf
 from tensorflow.keras import layers, Model
+from keras.saving import register_keras_serializable
 
+@register_keras_serializable(package="Poker")
 class PokerCNNEncoder(Model):
-    def __init__(self, input_shape, filters=(8, 16, 32), kernel_size=2, embedding_dim=32, use_equivariance=True):
-        super().__init__()
+    def __init__(self, input_shape, filters=(8, 16, 32), kernel_size=2, embedding_dim=32, use_equivariance=True, **kwargs):
+        super().__init__(**kwargs)
+        self.input_shape = input_shape
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.embedding_dim = embedding_dim
+        self.use_equivariance = use_equivariance
+        
         self.convs = [
-            layers.Conv2D(f, kernel_size, padding="same", activation="relu")
-            for f in filters
+            layers.Conv2D(f, self.kernel_size, padding="same", activation="relu")
+            for f in self.filters
         ]
-        self.bn = [layers.BatchNormalization() for _ in filters]
+        self.bn = [layers.BatchNormalization() for _ in self.filters]
         self.flatten = layers.Flatten()
         self.dense1 = layers.Dense(256, activation="relu")
         self.dense2 = layers.Dense(64, activation="relu")
         self.dropout = layers.Dropout(0.2)
-        self.embedding = layers.Dense(embedding_dim, activation=None)  # <-- embeddings live here
-        if use_equivariance == True:
+        self.embedding = layers.Dense(self.embedding_dim, activation=None)  # <-- embeddings live here
+        if self.use_equivariance == True:
             self.equiv = SuitEquivariantLayer(pooling="mean")
         else:
             self.equiv = None
@@ -36,15 +44,32 @@ class PokerCNNEncoder(Model):
             x = bn(x, training=training)
         x = self.flatten(x)
         x = self.dense1(x)
+        x = self.dropout(x, training=training)
         x = self.dense2(x)
         x = self.dropout(x, training=training)
         x = self.embedding(x)
         return x  # embedding vector
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "input_shape": self.input_shape,
+            "filters": self.filters if hasattr(self, "filters") else (8, 16, 32),
+            "kernel_size": self.kernel_size,
+            "embedding_dim": self.embedding_dim,
+            "use_equivariance": self.use_equivariance,
+        })
+        return config
 
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+
+@register_keras_serializable(package="Poker")
 class PokerValueModel(Model):
-    def __init__(self, encoder, activation="sigmoid"):
-        super().__init__()
+    def __init__(self, encoder, activation="sigmoid", **kwargs):
+        super().__init__(**kwargs)
         self.encoder = encoder
         self.value_head = layers.Dense(1, activation=activation)
 
@@ -53,14 +78,24 @@ class PokerValueModel(Model):
         value = self.value_head(embedding)
         return value
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"activation": self.value_head.activation.__name__})
+        return config
 
+@register_keras_serializable(package="Poker")
 class PokerValueHeads(tf.keras.Model):
-    def __init__(self, encoders, activation="sigmoid"):
-        super().__init__()
-        self.hand_value = PokerValueModel(encoders.hand_encoder, activation)
-        self.board_value = PokerValueModel(encoders.board_encoder, activation)
-        self.combined_value = PokerValueModel(encoders.combined_encoder, activation)
-        
+    def __init__(self, encoders=None, activation="sigmoid", **kwargs):
+        super().__init__(**kwargs)
+        if encoders == None:
+            self.encoders = PokerComboModel() #PokerCNNEncoder()
+        else:
+            self.encoders = encoders
+        self.hand_value = PokerValueModel(self.encoders.hand_encoder, activation)
+        self.board_value = PokerValueModel(self.encoders.board_encoder, activation)
+        self.combined_value = PokerValueModel(self.encoders.combined_encoder, activation)
+        self.activation = activation
+
     def call(self, inputs, training=False, return_all=False):
         hand, board, combo = inputs
 
@@ -73,27 +108,21 @@ class PokerValueHeads(tf.keras.Model):
         
         return combined_v
 
-class PokerValueHeads(tf.keras.Model):
-    def __init__(self, encoders, activation="sigmoid"):
-        super().__init__()
-        self.hand_value = PokerValueModel(encoders.hand_encoder, activation)
-        self.board_value = PokerValueModel(encoders.board_encoder, activation)
-        self.combined_value = PokerValueModel(encoders.combined_encoder, activation)
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "activation": self.hand_value.value_head.activation.__name__,
+        })
+        return config
 
-    def call(self, inputs, training=False, return_all=False):
-        hand, board, combo = inputs
-        # combo = tf.concat([hand, board, hand + board], axis=-1)
-
-        hand_v = self.hand_value(hand, training=training)
-        board_v = self.board_value(board, training=training)
-        combined_v = self.combined_value(combo, training=training)
-
-        if return_all:
-            return hand_v, board_v, combined_v
-        return combined_v
+    @classmethod
+    def from_config(cls, config):
+        activation = config.pop("activation", "sigmoid")
+        encoders = PokerComboModel() #PokerCNNEncoder()
+        return cls(encoders=encoders, activation=activation, **config)
 
 
-
+@register_keras_serializable(package="Poker")
 class SuitEquivariantLayer(tf.keras.layers.Layer):
     def __init__(self, pooling="mean", **kwargs):
         super().__init__(**kwargs)
@@ -121,9 +150,10 @@ class SuitEquivariantLayer(tf.keras.layers.Layer):
         return X_pooled
         
 
+@register_keras_serializable(package="Poker")
 class PokerComboModel(tf.keras.Model):
-    def __init__(self, embedding_dim=32):
-        super().__init__()
+    def __init__(self, embedding_dim=32, **kwargs):
+        super().__init__(**kwargs)
         self.hand_encoder = PokerCNNEncoder(input_shape=(13, 4, 1), embedding_dim=embedding_dim, use_equivariance=True)
         self.board_encoder = PokerCNNEncoder(input_shape=(13, 4, 1), embedding_dim=embedding_dim, use_equivariance=True)
         self.combined_encoder = PokerCNNEncoder(input_shape=(13, 4, 1), embedding_dim=embedding_dim, use_equivariance=True)
@@ -148,10 +178,42 @@ class PokerComboModel(tf.keras.Model):
             return hand_emb, board_emb, combined_emb
 
         return combined_emb
+
+@register_keras_serializable(package="poker")
+class ComboConcatLayer(tf.keras.layers.Layer):
+    def call(self, inputs):
+        hand, board = inputs
+        return tf.concat([hand, board, hand+board], axis=-1)        
+
+    def compute_output_shape(self, input_shape):
+        batch_size, h, w, c = input_shape[0]
+        return (batch_size, h, w, c*3)
+
+def build_value_model(config): # build_value_model ?
+    inputs = tf.keras.Input(shape=(13, 4, 2), name="poker_input")
     
+    # --- Split and combine grids ---
+    hand = inputs[..., 0:1]         # (batch, 13, 4, 1)
+    board = inputs[..., 1:2]        # (batch, 13, 4, 1)
+    combo = ComboConcatLayer(name="combo_concat")([hand, board])
+    # combo = Lambda(lambda x:ops.concatenate([x[0], x[1], x[0]+x[1]], axis=-1), output_shape=(13, 4, 3))([hand, board])
 
+    encoder = PokerComboModel(embedding_dim=config["embedding_dim"])
+    value_heads = PokerValueHeads(encoder, activation=config["activation"])
+    hand_v, board_v, combined_v = value_heads([hand, board, combo], training=True, return_all=True)
 
+    # --- Build Model ---
+    model = tf.keras.Model(inputs=inputs, outputs=[hand_v, board_v, combined_v])
+    
+    # --- Compile Model ---
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=config["lr"]),
+        loss=["mse", "mse", "mse"],
+        loss_weights=[0.3, 0.3, 0.4],
+        metrics=["mae", "mae", "mae"]
+    )
 
+    return model
 
 def get_permutation_matrices(n=4):
     perms = list(itertools.permutations(range(n)))

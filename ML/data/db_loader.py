@@ -67,6 +67,14 @@ def data_generator(db, db_batch_size=20000, model_batch_size=1024):
         for i in range(0, len(x_tensor), model_batch_size):
             yield x_tensor[i:i + model_batch_size], y_tensor[i:i+model_batch_size]
 
+def data_generator_3_heads(db, db_batch_size=20000, model_batch_size=1024):
+    while True:
+        sample_evaluations = db.get_sample_evaluations(db_batch_size)
+        x_tensor, y_tensor = create_tensor_grids(sample_evaluations)
+
+        for i in range(0, len(x_tensor), model_batch_size):
+            # yield x_tensor[i:i + model_batch_size], y_tensor[i:i+model_batch_size]
+            yield x_tensor[i:i + model_batch_size], (y_tensor[i:i+model_batch_size], y_tensor[i:i+model_batch_size], y_tensor[i:i+model_batch_size])
 
 def cards_to_bitmask(cards):
     """
