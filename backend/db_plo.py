@@ -455,6 +455,18 @@ class DB_PLO:
         print(f"✅ Returned {len(rows)} evaluations")
         return rows
 
+    def get_sample_board_evaluations(self, batch_size: int):
+        query = f"SELECT e1.board_mask, e1.hand_mask AS hand_a, e2.hand_mask AS hand_b, e1.high_value AS value_a, e2.high_value AS value_b \
+            FROM plo_evaluations_bm e1 JOIN plo_evaluations_bm e2 ON e1.board_mask = e2.board_mask AND e1.hand_mask <> e2.hand_mask \
+            ORDER BY RANDOM() LIMIT {batch_size};"
+
+        self.cursor.execute(query)
+        # self.cursor.execute(f"SELECT * FROM plo_evaluations_bm ORDER BY RANDOM() LIMIT {batch_size};")
+        rows = self.cursor.fetchall()
+
+        print(f"✅ Returned {len(rows)} evaluations")
+        return rows
+
 
     def get_boards_with_card(self, card_str, suit_pattern=None):
         if suit_pattern is not None:

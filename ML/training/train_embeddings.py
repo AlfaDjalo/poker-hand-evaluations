@@ -7,14 +7,14 @@ from keras.layers import Lambda
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend")))
 
-from db_plo import DB_PLO, open_db
-from data.db_loader import data_generator, data_generator_3_heads
+# from db_plo import DB_PLO, open_db
+# from data.db_loader import data_generator, data_generator_3_heads
 from data.generators import AbsoluteGenerator, PairwiseGenerator
 from models.implementation import PokerCNNEncoder, PokerComboModel, PokerValueModel, SuitEquivariantLayer, PokerValueHeads, ComboConcatLayer
-from models.utils import save_model, load_model
+# from models.utils import save_model, load_model
 from training.evaluation import evaluate_model
 from training.trainer import train_embeddings
-from config import get_config
+from config import get_config, summarize_config
 
 def wrapped_generator(gen):
     for x, y in gen:
@@ -88,13 +88,17 @@ def main():
     # training_mode = "pairwise" # "absolute_value"
 
     config = get_config()
-    model = train_embeddings(mode=config["mode"], config=config)
+    summarize_config(config)
+    model = train_embeddings(config=config)
     
     # --- Evaluate after training ---
     print("\n🔍 Running post-training evaluation...")
-    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config)
-    evaluate_model(model, iter(eval_gen))
-
+    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, "hand")
+    # evaluate_model(model, iter(eval_gen))
+    if config["mode"] == "absolute_value":
+        evaluate_model(model, iter(eval_gen), model_type='absolute')
+    else:
+        evaluate_model(model, iter(eval_gen), model_type='pairwise')
     # evaluate_model(model, data)
 
     # db = open_db()
