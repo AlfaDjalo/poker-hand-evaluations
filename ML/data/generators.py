@@ -6,14 +6,33 @@ import itertools
 RANKS = 'AKQJT98765432'
 SUITS = 'shdc'
 
-def create_tensor_grids(rows):
-    inputs = []
-    labels = []
+def create_tensor_grids(mode, rows):
+    """
+    Function for converting database rows to model input data for absolute_value model.
+    
+    Args:
+        mode (str): Training mode
+        rows (tuple): Database rows, tuples of (hand_mask, board_mask, high_value, low_value)
 
-    for (hand_mask, board_mask, high_value, low_value) in rows:
+    Returns:
+        tuple (x, y):
+            x is (len(rows), 13, 4, 2) tensor of ([hand_grid], [board_grid])
+            y is (len(rows)) tensor of floats [0, 1] for the output labels
+    """
+
+    def create_grids(hand_mask, board_mask):
+        """
+        Helper function to create hand and board grids.
+        
+        Args:
+            hand ():
+            board ():
+
+        Returns:
+            tensor: Combined (hand, board) grids
+        """
         hand_grid = np.zeros((13,4), dtype=np.float32)
         board_grid = np.zeros((13,4), dtype=np.float32)
-        # full_grid = np.zeros((13,4), dtype=np.float32)
 
         for bit_index in range(52):
             rank = bit_index // 4
@@ -26,79 +45,45 @@ def create_tensor_grids(rows):
                 # full_grid[rank][suit] = 1
 
         combined = np.stack([hand_grid, board_grid], axis=-1)
-        # combined = np.stack([hand_grid, board_grid, full_grid], axis=-1)
-        inputs.append(combined)
-        labels.append((high_value - 1) / 7461.0)
-        # labels.append(high_value)
 
-    x = tf.convert_to_tensor(np.stack(inputs))
+        return combined
+    
+
+    if mode == "absolute_value":
+        inputs = []
+    else:
+        inputs_A = []
+        inputs_B = []
+    
+    labels = []
+
+    for row in rows:
+        if mode == "absolute_value":
+            (hand_mask, board_mask, high_value, low_value) = row
+            combined = create_grids(hand_mask, board_mask)
+            inputs.append(combined)
+            labels.append((high_value - 1) / 7461.0)
+        else:
+            (hand_A, hand_B, board_A, board_B, high_value_A, high_value_B) = row
+            grid_A = create_grids(hand_A, board_A)
+            grid_B = create_grids(hand_B, board_B)
+
+            inputs_A.append(grid_A)
+            inputs_B.append(grid_B)
+            
+            labels.append(1.0 if high_value_A < high_value_B else 0.0)
+
+    if mode == "absolute_value":
+        x = tf.convert_to_tensor(np.stack(inputs))
+    else:
+        x = (
+            tf.convert_to_tensor(np.stack(inputs_A)),
+            tf.convert_to_tensor(np.stack(inputs_B))
+        )
+
     y = tf.convert_to_tensor(np.array(labels), dtype=tf.float32)[..., None]
+    
     return x, y
-
-def create_pairwise_tensor_grids(hands_a, hands_b, boards_a, boards_b):
-    """
-    Convert paired hand/board bitmasks into model input format.
-    
-    Returns:
-        x1: tuple of (hand1, board1, combo1) tensors
-        x2: tuple of (hand2, board2, combo2) tensors
-    """
-    def bitmask_to_grids(hand_mask, board_mask):
-        """Convert single hand/board bitmask pair to grids."""
-        hand_grid = np.zeros((13, 4), dtype=np.float32)
-        board_grid = np.zeros((13, 4), dtype=np.float32)
-
-        for bit_index in range(52):
-            rank = bit_index // 4
-            suit = bit_index % 4
-            if hand_mask & (1 << bit_index):
-                hand_grid[rank][suit] = 1
-            if board_mask & (1 << bit_index):
-                board_grid[rank][suit] = 1
-
-        return hand_grid, board_grid
-
-    hands1_grids = []
-    boards1_grids = []
-    combos1_grids = []
-
-    hands2_grids = []
-    boards2_grids = []
-    combos2_grids = []
-    
-    for hand_a, board_a, hand_b, board_b in zip(hands_a, boards_a, hands_b, boards_b):
-        hand1_grid, board1_grid = bitmask_to_grids(hand_a, board_a)
-        combo1_grid = hand1_grid + board1_grid
-        # combo1_grid = np.stack([hand1_grid, board1_grid, hand1_grid+board1_grid], axis=-1)
-
-        hands1_grids.append(hand1_grid[..., None])
-        boards1_grids.append(board1_grid[..., None])
-        combos1_grids.append(combo1_grid[..., None])
-        # combos1_grids.append(combo1_grid)
-
-        hand2_grid, board2_grid = bitmask_to_grids(hand_b, board_b)
-        combo2_grid = hand2_grid + board2_grid
-        # combo2_grid = np.stack([hand2_grid, board2_grid, hand2_grid+board2_grid], axis=-1)
-
-        hands2_grids.append(hand2_grid[..., None])
-        boards2_grids.append(board2_grid[..., None])
-        combos2_grids.append(combo2_grid[..., None])
-        # combos2_grids.append(combo2_grid)
-
-    x1 = (
-        tf.convert_to_tensor(np.stack(hands1_grids)),
-        tf.convert_to_tensor(np.stack(boards1_grids)),
-        tf.convert_to_tensor(np.stack(combos1_grids))        
-    )    
-
-    x2 = (
-        tf.convert_to_tensor(np.stack(hands2_grids)),
-        tf.convert_to_tensor(np.stack(boards2_grids)),
-        tf.convert_to_tensor(np.stack(combos2_grids))        
-    )    
-
-    return x1, x2
-
 
 
 def cards_to_bitmask(cards):
@@ -209,7 +194,7 @@ class AbsoluteGenerator(BaseGenerator):
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
         sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
-        x_tensor, y_tensor = create_tensor_grids(sample_evaluations)
+        x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
         return x_tensor.numpy(), y_tensor.numpy()
 
     def __len__(self):
@@ -232,45 +217,120 @@ class AbsoluteGenerator(BaseGenerator):
 
 
 # ==========================================================
-# Pairwise generator (ranking training)
+# Pairwise generator (supervised regression)
 # ==========================================================
 class PairwiseGenerator(BaseGenerator):
-    """Generates (x1, x2, y) pairs for pairwise / ranking training."""
-    def __init__(self, config, mode):
+    """Fetches absolute combo value samples for regression training."""
+    def __init__(self, config, mode_override=None):
         super().__init__(config)
-        self.mode = mode
-        self.x1, self.x2, self.y = self._load_new_batch()
+        if mode_override != None:
+            self.mode = mode_override
+        self.x, self.y = self._load_new_batch()
 
     def _load_new_batch(self):
-        """Pull a new large batch from DB and convert to tensors."""
-        print("⏳ Querying DB...")
-        rows = self.db.get_comparison_pairs(self.mode, self.db_batch_size)
-        print(f"✅ DB returned {len(rows)} rows")
-        if rows:
-            print("Example row:", rows[0])
-
-        hands_a, hands_b, boards_a, boards_b, values_a, values_b = self.unpack_rows(rows)
-
-        x1, x2 = create_pairwise_tensor_grids(hands_a, hands_b, boards_a, boards_b)
-
-        y = (values_a > values_b).astype("float32")
-        y_tensor = tf.convert_to_tensor(y)[..., None]
-
-        return (
-            (x1[0].numpy(), x1[1].numpy(), x1[2].numpy()),
-            (x2[0].numpy(), x2[1].numpy(), x2[2].numpy()),
-            y_tensor.numpy()
-        )    
+        """ Pull a new large batch from DB and convert to tensors. """
+        sample_evaluations = self.db.get_comparison_pairs(self.mode, self.db_batch_size)
+        x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        return x_tensor, y_tensor
 
     def __len__(self):
         return self.db_batch_size // self.batch_size
     
     def __getitem__(self, idx):
+        """ Return one sub-batch. """
+        # Select a slice to yield this step
+        start = (idx * self.batch_size) % len(self.x)
+        end = start + self.batch_size
+
+        x_A = self.x[0][start:end]
+        x_B = self.x[1][start:end]
+
+        y_batch = self.y[start:end]
+
+        return (x_A, x_B), (y_batch, y_batch, y_batch)
+        # return self.x[start:end], self.y[start:end]
+
+    def on_epoch_end(self):
+        """ Reload data at end of each epoch. """
+        self.x, self.y = self._load_new_batch()
+
+  
+# ==========================================================
+# Alternating generator (mixes pair types)
+# ==========================================================
+class AlternatingGenerator(PairwiseGenerator):
+    """Mixes 'board' and 'hand' pair types dynamically."""
+    def __init__(self, config, cycle=("board", "hand", "mix")):
+        BaseGenerator.__init__(self, config)  # Call grandparent directly
+        # super().__init__(config, mode="alternating")
+        self.mode = "alternating"
+        self.cycle = itertools.cycle(cycle)
+        self.mix_ratio = config.get("mix_ratio", None)
+
+        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
+        self.x, self.y = self._load_new_batch()
+
+    def _load_new_batch(self):
+        """ Pull a new large batch from DB and convert to tensors. """
+        sample_evaluations = self.db.get_comparison_pairs(self.current_mode, self.db_batch_size)
+        x_tensor, y_tensor = create_tensor_grids(self.current_mode, sample_evaluations)
+        return x_tensor, y_tensor
+
+    def __len__(self):
+        return self.db_batch_size // self.batch_size
+    
+    def __getitem__(self, idx):
+        """ Return one sub-batch. """
+        # Select a slice to yield this step
+        start = (idx * self.batch_size) % len(self.x)
+        end = start + self.batch_size
+
+        x_A = self.x[0][start:end]
+        x_B = self.x[1][start:end]
+
+        y_batch = self.y[start:end]
+
+        return (x_A, x_B), (y_batch, y_batch, y_batch)
+
+
+    def on_epoch_end(self):
+        """Reload data with next mode in cycle."""
+        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
+        self.x, self.y = self._load_new_batch()
+
+
+
+
+# ==========================================================
+# Alternating generator (mixes pair types)
+# ==========================================================
+class AlternatingGeneratorOld(PairwiseGenerator):
+    """Mixes 'board' and 'hand' pair types dynamically."""
+    def __init__(self, config, cycle=("board", "hand")):
+        BaseGenerator.__init__(self, config)  # Call grandparent directly
+        # super().__init__(config, mode="alternating")
+        self.mode = "alternating"
+        self.cycle = itertools.cycle(cycle)
+        self.mix_ratio = config.get("mix_ratio", None)
+
+        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
+        self.x1, self.x2, self.y = self._load_batch_with_mode(self.current_mode)
+
+    def __getitem__(self, idx):
         """Return one sub-batch."""
         start = (idx * self.batch_size) % len(self.y)
         end = start + self.batch_size
+
+        # batch = (
+        #     self.x1[0][start:end],
+        #     self.x1[1][start:end],
+        #     self.x1[2][start:end],
         
-        # Extract slices for this batch
+        #     self.x2[0][start:end],
+        #     self.x2[1][start:end],
+        #     self.x2[2][start:end]
+        # )
+
         x1_batch = (
             self.x1[0][start:end],
             self.x1[1][start:end],
@@ -285,70 +345,8 @@ class PairwiseGenerator(BaseGenerator):
         
         y_batch = self.y[start:end]
         
-        # Return format: (x1, x2), (y, y, y) for three outputs
         return (x1_batch, x2_batch), (y_batch, y_batch, y_batch)
-
-    def on_epoch_end(self):
-        """Reload data at end of each epoch."""
-        self.x1, self.x2, self.y = self._load_new_batch()
-
-    # def __getitem__(self, idx):
-    #     print("⏳ Querying DB...")
-    #     rows = self.db.get_comparison_pairs(self.mode, self.db_batch_size)
-    #     print("Example row:", rows[0])
-    #     print("✅ DB returned", len(rows), "rows")
-
-    #     hands_a, hands_b, boards_a, boards_b, values_a, values_b = self.unpack_rows(rows)
-
-    #     x1 = self.encoder.encode(hands_a, boards_a)
-    #     x2 = self.encoder.encode(hands_b, boards_b)
-
-    #     y = (values_a > values_b).astype("float32")
-
-    #     return (x1, x2), (y, y, y)
-
-        # return rows
-
-    # def __getitem__(self, idx):
-    #     """Ask DB for comparison pairs according to current mode."""
-    #     return self.db.get_comparison_pairs(self.mode, self.db_batch_size)
-  
-
-# ==========================================================
-# Alternating generator (mixes pair types)
-# ==========================================================
-class AlternatingGenerator(PairwiseGenerator):
-    """Mixes 'board' and 'hand' pair types dynamically."""
-    def __init__(self, config, cycle=("board", "hand")):
-        BaseGenerator.__init__(self, config)  # Call grandparent directly
-        # super().__init__(config, mode="alternating")
-        self.mode = "alternating"
-        self.cycle = itertools.cycle(cycle)
-        self.mix_ratio = config.get("mix_ratio", None)
-
-        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
-        self.x1, self.x2, self.y = self._load_batch_with_mode(self.current_mode)
-
-        def __getitem__(self, idx):
-            """Return one sub-batch."""
-            start = (idx * self.batch_size) % len(self.y)
-            end = start + self.batch_size
-            
-            x1_batch = (
-                self.x1[0][start:end],
-                self.x1[1][start:end],
-                self.x1[2][start:end]
-            )
-            
-            x2_batch = (
-                self.x2[0][start:end],
-                self.x2[1][start:end],
-                self.x2[2][start:end]
-            )
-            
-            y_batch = self.y[start:end]
-            
-            return (x1_batch, x2_batch), (y_batch, y_batch, y_batch)
+        # return (x1_batch, x2_batch), (y_batch, y_batch, y_batch)
 
     # def __getitem__(self, idx):
     #     mode = next(self.cycle)
@@ -363,21 +361,51 @@ class AlternatingGenerator(PairwiseGenerator):
         print("⏳ Querying DB...")
         rows = self.db.get_comparison_pairs(mode, self.db_batch_size)
         print(f"✅ DB returned {len(rows)} rows")
-        if rows:
-            print("Example row:", rows[0])
+        # if rows:
+        #     print("Example row:", rows[0])
 
         hands_a, hands_b, boards_a, boards_b, values_a, values_b = self.unpack_rows(rows)
 
+        # print("Hands A:", bitmask_to_cards(hands_a[0]))
+        # print("Boards A:", bitmask_to_cards(boards_a[0]))
+
+        # print("Hands B:", bitmask_to_cards(hands_b[0]))
+        # print("Boards B:", bitmask_to_cards(boards_b[0]))
+
+        # print("values:", values_a[0], values_b[0])
+
         x1, x2 = create_pairwise_tensor_grids(hands_a, hands_b, boards_a, boards_b)
 
-        y = (values_a > values_b).astype("float32")
+        y = (values_a <= values_b).astype("float32")
+        # y = (values_a > values_b).astype("float32")
         y_tensor = tf.convert_to_tensor(y)[..., None]
 
-        return (
-            (x1[0].numpy(), x1[1].numpy(), x1[2].numpy()),
-            (x2[0].numpy(), x2[1].numpy(), x2[2].numpy()),
-            y_tensor.numpy()
-        )    
+        self.last_batch_values_A = values_a
+        self.last_batch_values_B = values_b
+
+        print("sample values:", values_a[:10], values_b[:10], "labels:", y[:10].ravel())
+
+        self.x1 = (
+            x1[0].numpy(),
+            x1[1].numpy(),
+            x1[2].numpy()
+        )
+
+        self.x2 = (
+            x2[0].numpy(),
+            x2[1].numpy(),
+            x2[2].numpy()
+        )
+
+        self.y = y_tensor.numpy()
+        return self.x1, self.x2, self.y
+    
+
+        # return (
+        #     (x1[0].numpy(), x1[1].numpy(), x1[2].numpy()),
+        #     (x2[0].numpy(), x2[1].numpy(), x2[2].numpy()),
+        #     y_tensor.numpy()
+        # )    
 
     def on_epoch_end(self):
         """Reload data with next mode in cycle."""

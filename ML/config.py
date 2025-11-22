@@ -14,15 +14,15 @@ def get_config():
 
     config = {
         # ---- General ----
-        "mode": "absolute_value", #"absolute_value",
-        "load_encoder_model": True,
-        "load_head_model": True,
-        "save_model": True,
+        "mode": "alternating", #"absolute_value",
+        "load_encoder_model": False,
+        "load_head_model": False,
+        "save_model": False,
 
         # ---- Database ----
         "db": db,
         "db_batch_size": 32000, #32000,
-        "model_batch_size": 64,
+        "model_batch_size": 1024,
 
         # ---- Model ----
         "input_shape": (13, 4, 2),
@@ -35,9 +35,9 @@ def get_config():
         "activation": "sigmoid",
         "use_equivariance": True,
 
-        # --- Training ----
-        "epochs": 10, #100
-        "steps_per_epoch": 100, #500,
+        # ---- Training ----
+        "epochs": 5, #100
+        "steps_per_epoch": 500, #500,
         "callbacks": [],
         "mix_ratio": [0.4, 0.4, 0.2],
 

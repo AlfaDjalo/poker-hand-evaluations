@@ -1,5 +1,6 @@
 import os
 import json
+import random
 
 import psycopg2
 
@@ -161,35 +162,22 @@ class DB_PLO:
             raise ValueError(f"Invalid mode: {mode}")
 
         self.cursor.execute(query)
-        return self.cursor.fetchall()
+        rows = self.cursor.fetchall()
+
+        for i in range(len(rows)):
+            if random.random() < 0.5:
+                hand_a, hand_b = rows[i][0], rows[i][1]
+                board_a, board_b = rows[i][2], rows[i][3]
+                value_a, value_b = rows[i][4], rows[i][5]
+                rows[i] = (hand_b, hand_a, board_b, board_a, value_b, value_a)
+       
+        # Shuffle rows to add randomness
+        # random.shuffle(rows)
+
+        # Then return only up to batch_size, just in case
+        return rows[:batch_size]
 
 
-    # def get_comparison_pairs(self, mode, batch_size=10000):
-    #     """
-    #     Return random pairs of (hand, board, value) depending on mode:
-    #         - boards: same board, different hands
-    #         - hand: same hand, different boards
-    #         - mixed: random (hand, board) pairs
-            
-    #     Returns:
-    #         List of tuples: (hand_a_mask, board_a_mask, value_a,
-    #                          hand_b_mask, board_b_mask, value_b)
-    #     """
-    #     if mode == "board":
-    #         query = f"SELECT e1.board_mask, e1.hand_mask AS hand_a, e2.hand_mask AS hand_b, e1.high_value AS value_a, e2.high_value AS value_b \
-    #             FROM plo_evaluations_bm e1 JOIN plo_evaluations_bm e2 ON e1.board_mask = e2.board_mask AND e1.hand_mask <> e2.hand_mask \
-    #             ORDER BY RANDOM() LIMIT {batch_size};"
-    #     elif mode == "hand":
-    #         query = f"SELECT e1.hand_mask, e1.board_mask AS board_a, e2.board_mask AS board_b, e1.high_value AS value_a, e2.high_value AS value_b \
-    #             FROM plo_evaluations_bm e1 JOIN plo_evaluations_bm e2 ON e1.hand_mask = e2.hand_mask AND e1.board_mask <> e2.board_mask \
-    #             ORDER BY RANDOM() LIMIT {batch_size};"
-    #     elif mode == "mix":
-    #         query = f"SELECT e1.hand_mask, e1.board_mask AS board_a, e2.board_mask AS board_b, e1.high_value AS value_a, e2.high_value AS value_b \
-    #             FROM plo_evaluations_bm e1 JOIN plo_evaluations_bm e2 ON e1.hand_mask <> e2.hand_mask AND e1.board_mask <> e2.board_mask \
-    #             ORDER BY RANDOM() LIMIT {batch_size};"
-    #     else:
-    #         raise ValueError(f"Invalid mode: {mode}")
 
-    #     self.cursor.execute(query)
-    #     # self.cursor.execute(query, (limit,))
-    #     return self.cursor.fetchall()
+        # self.cursor.execute(query)
+        # return self.cursor.fetchall()

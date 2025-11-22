@@ -83,48 +83,18 @@ def evaluate_model_old(model, data):
 
 def main():
 
-    # load_model_from_file = True
-    # save_model_to_file = True
-    # training_mode = "pairwise" # "absolute_value"
-
     config = get_config()
     summarize_config(config)
     model = train_embeddings(config=config)
     
     # --- Evaluate after training ---
     print("\n🔍 Running post-training evaluation...")
-    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, "hand")
-    # evaluate_model(model, iter(eval_gen))
+    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="hand")
+
     if config["mode"] == "absolute_value":
-        evaluate_model(model, iter(eval_gen), model_type='absolute')
+        evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=10)
     else:
-        evaluate_model(model, iter(eval_gen), model_type='pairwise')
-    # evaluate_model(model, data)
-
-    # db = open_db()
-    # data = data_generator(db, db_batch_size=32000, model_batch_size=64)
-    # if training_mode == "pairwise":
-    #     data = data_generator_pairs(db, db_batch_size=32000, model_batch_size=64)
-    # else:        
-    #     data = data_generator_3_heads(db, db_batch_size=32000, model_batch_size=64)
-    
-    # if load_model_from_file == True:
-    #     base_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from training/
-    #     path = os.path.join(base_dir, "models", "saved", "poker_value_model.keras")
-    #     # model_path = 'models/saved/poker_value_model.keras'
-    #     model = load_model(path)
-    #     print("✅ Model loaded successfully.")
-    # else:
-    #     model = build_model()
-    
-    # model = train_model(model, data, epochs=100, steps_per_epoch=500)
-    # evaluate_model(model, data)
-
-    # if save_model_to_file == True:
-    #     base_dir = os.path.dirname(os.path.dirname(__file__))  # goes up one level from training/
-    #     path = os.path.join(base_dir, "models", "saved", "poker_value_model.keras")
-    #     save_model(model, path)
-
+        evaluate_model(model, iter(eval_gen), model_type='pairwise', num_examples=10)
 
 if __name__ == "__main__":
     main()
