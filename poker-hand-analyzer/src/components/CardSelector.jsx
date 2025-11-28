@@ -37,7 +37,8 @@ const CardSelector = ({ onSelectCard, usedCards = [] }) => {
           ) : (
             <DraggableCard 
               id={card}
-              source={{ type: 'selector' }}
+              source={{ variant: 'selector' }}
+              // source={{ type: 'selector' }}
               onClick={() => handleCardClick(card)}  // click works again
             >
               <Card
@@ -57,7 +58,7 @@ const CardSelector = ({ onSelectCard, usedCards = [] }) => {
 
   const { setNodeRef, isOver } = useDroppable({
     id: "card-selector",
-    data: { variant: "trash" },
+    data: { variant: "selector" },
   });
 
   return (

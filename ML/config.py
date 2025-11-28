@@ -14,10 +14,11 @@ def get_config():
 
     config = {
         # ---- General ----
-        "mode": "alternating", #"absolute_value",
-        "load_encoder_model": False,
-        "load_head_model": False,
-        "save_model": False,
+        # "mode": "alternating",
+        "mode": "absolute_value",
+        "load_encoder_model": True,
+        "load_head_model": True,
+        "save_model": False, #True,
 
         # ---- Database ----
         "db": db,
@@ -30,16 +31,39 @@ def get_config():
         "filters": (8, 16, 32),
         "kernel_size": 2,
         "embedding_dim": 32,
+        "hand_embedding_dim": 32,
+        "board_embedding_dim": 32,
+        "combined_embedding_dim": 64,
         "lr": 1e-3,
+        "lr_absolute_value": 1e-3,
+        "lr_pairwise": 1e-3,
         "loss_weights": [0.3, 0.3, 0.4],
         "activation": "sigmoid",
         "use_equivariance": True,
 
         # ---- Training ----
-        "epochs": 5, #100
-        "steps_per_epoch": 500, #500,
-        "callbacks": [],
-        "mix_ratio": [0.4, 0.4, 0.2],
+        "epochs": 100,
+        "steps_per_epoch": 500,
+        # "callbacks": [],
+        "mix_ratio": [0.45, 0.45, 0.1],
+
+        # ---- Callback hyperparameters ----
+        "reduce_lr": {
+            "monitor": "val_loss",
+            "factor": 0.5,
+            "patience": 6,
+            "min_delta": 0.0, # added
+            "min_lr": 1e-6
+        },
+        "early_stopping": {
+            "monitor": "val_loss",
+            "patience": 15,
+            "min_delta": 0.005, # added
+            "restore_best_weights": True
+        },
+        "checkpoint": {
+            "save_best_only": True
+        },
 
         # ---- Paths ----
         "save_directory": os.path.join(base_dir, "models", "saved"),

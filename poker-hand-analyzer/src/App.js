@@ -3,6 +3,7 @@ import React from 'react';
 import PokerHandAnalyzer from './PokerHandAnalyzer';
 import EquityCalculator from './components/EquityCalculator';
 import CardSelector from './components/CardSelector';
+import ViewEmbeddings from './components/ViewEmbeddings';
 import GameSimulator from './components/GameSimulator';
 import { Navbar } from "./components/Navbar";
 import './App.css';
@@ -32,6 +33,16 @@ function App() {
               element={
                 <div>
                   <PokerHandAnalyzer />
+                </div>
+              }
+            />
+
+            {/* View Embeddings */}
+            <Route
+              path="/view_embeddings"
+              element={
+                <div>
+                  <ViewEmbeddings />
                 </div>
               }
             />

@@ -47,6 +47,17 @@ export const Navbar = ( {menuOpen, setMenuOpen} ) => {
                         </NavLink>
 
                         <NavLink
+                            to="/view_embeddings"
+                            className={({ isActive }) =>
+                                isActive
+                                ? "text-white font-semibold"
+                                : "text-gray-300 hover:text-white transition-colors"
+                            }
+                        >
+                            View Embeddings
+                        </NavLink>
+
+                        <NavLink
                             to="/equity_calculator"
                             className={({ isActive }) =>
                                 isActive

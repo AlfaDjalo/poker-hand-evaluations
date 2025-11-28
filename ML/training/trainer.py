@@ -1,5 +1,7 @@
 import os
 import tensorflow as tf
+import numpy as np
+from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 # from ML.models.utils import load_model
 from models.implementation import build_value_model, build_pairwise_model
@@ -13,7 +15,7 @@ from models.implementation import (
     PairwiseComparisonModel,
     PairwiseComparisonHeads
 )
-from data.generators import AbsoluteGenerator, PairwiseGenerator, AlternatingGenerator
+from data.generators import AbsoluteGenerator, PairwiseGenerator, AlternatingGenerator, create_tensor_grids
 
 def load_value_model(path):
     return tf.keras.models.load_model(
@@ -52,7 +54,9 @@ def get_custom_objects():
         "PokerComboModel": PokerComboModel,
         "PokerValueHeads": PokerValueHeads,
         "PokerValueModel": PokerValueModel,
-        "PairwiseModel": PairwiseModel,
+        # 'PairwiseModel': PairwiseModel
+        'PairwiseComparisonModel': PairwiseComparisonModel,
+        'PairwiseComparisonHeads': PairwiseComparisonHeads,
         "SuitEquivariantLayer": SuitEquivariantLayer,
     }
 
@@ -63,7 +67,8 @@ def train_embeddings(config=None):
     if mode == "absolute_value":
         train_gen = AbsoluteGenerator(config)
     elif mode in ["board", "hand", "mix"]:
-        train_gen = PairwiseGenerator(config, mode=mode)
+        train_gen = PairwiseGenerator(config)
+        # train_gen = PairwiseGenerator(config, mode_override=mode)
     elif mode == "alternating":
         train_gen = AlternatingGenerator(config)
 
@@ -94,11 +99,11 @@ def train_embeddings(config=None):
     if config["load_encoder_model"]:
         load_encoder(model, encoder_path)
 
-
     # --- Compile ---
     if mode=="absolute_value":
         loss = ["mse", "mse", "mse"]
         loss_weights = [0.3, 0.3, 0.4]
+        lr = config["lr_absolute_value"]
         # loss = tf.keras.losses.MeanSquaredError()
     else:
         loss = [
@@ -107,9 +112,38 @@ def train_embeddings(config=None):
             tf.keras.losses.BinaryCrossentropy(from_logits=False)
             ]
         loss_weights = config.get("pairwise_loss_weights", [0.3, 0.3, 0.4])
+        lr = config["lr_pairwise"]
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=config["lr"])
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
     model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights)
+
+    # ✅ Add verbose=1 to ReduceLROnPlateau to see when it triggers
+    reduce_cfg = config["reduce_lr"]
+    early_cfg = config["early_stopping"]
+    ckpt_cfg = config["checkpoint"]
+
+    callbacks = [
+        ReduceLROnPlateau(
+            monitor=reduce_cfg["monitor"],
+            factor=reduce_cfg["factor"],
+            patience=reduce_cfg["patience"],
+            min_lr=reduce_cfg["min_lr"],
+            verbose=1  # ✅ Ensure verbose is set
+        ),
+        EarlyStopping(
+            monitor=early_cfg["monitor"],
+            patience=early_cfg["patience"],
+            min_delta=reduce_cfg["min_delta"],
+            restore_best_weights=early_cfg["restore_best_weights"],
+            verbose=1
+        ),
+        ModelCheckpoint(
+            filepath=os.path.join(config["save_directory"], "best_model.keras"),
+            monitor="val_loss",
+            save_best_only=ckpt_cfg["save_best_only"],
+            verbose=1
+        )
+    ]
 
     print("\n=== TRAINABLE WEIGHTS DEBUG ===")
     total_params = 0
@@ -237,12 +271,59 @@ def train_embeddings(config=None):
 
     # print("=== END DEBUG ===\n")
 
+    # --- Create validation generator ---
+    val_config = dict(config)
+    val_config["is_validation"] = True  # ✅ Flag as validation mode
+    
+    if mode == "absolute_value":
+        val_gen = AbsoluteGenerator(val_config)
+    elif mode in ["board", "hand", "mix"]:
+        val_gen = PairwiseGenerator(val_config)
+    elif mode == "alternating":
+        val_gen = AlternatingGenerator(val_config)
+
+    # ✅ Pre-load ONE large validation batch from database
+    print("📊 Pre-loading validation batch...")
+    
+    if mode == "absolute_value":
+        sample_evals = val_gen.db.get_sample_evaluations(val_gen.db_batch_size)
+        val_x, val_y = create_tensor_grids(mode, sample_evals)
+    elif mode == "alternating":
+        # ✅ For alternating mode, use "mix" for validation (balanced representation)
+        sample_evals = val_gen.db.get_comparison_pairs("mix", val_gen.db_batch_size)
+        val_x, val_y = create_tensor_grids("mix", sample_evals)
+    else:
+        # ✅ For "board", "hand", "mix" modes, use the same mode
+        sample_evals = val_gen.db.get_comparison_pairs(mode, val_gen.db_batch_size)
+        val_x, val_y = create_tensor_grids(mode, sample_evals)
+    
+    # Store in generator for slicing each epoch
+    # ✅ Handle both tensor and tuple types
+    if isinstance(val_x, tuple):
+        # Pairwise: (x_A, x_B)
+        val_gen._preloaded_x = (
+            val_x[0].numpy() if not isinstance(val_x[0], np.ndarray) else val_x[0],
+            val_x[1].numpy() if not isinstance(val_x[1], np.ndarray) else val_x[1]
+        )
+    else:
+        # Absolute value: single tensor
+        val_gen._preloaded_x = val_x.numpy() if not isinstance(val_x, np.ndarray) else val_x
+    
+    val_gen._preloaded_y = val_y.numpy() if not isinstance(val_y, np.ndarray) else val_y
+    
+    # Print validation data size
+    if isinstance(val_gen._preloaded_x, tuple):
+        print(f"✅ Loaded {len(val_gen._preloaded_x[0])} validation samples (pairwise)")
+    else:
+        print(f"✅ Loaded {len(val_gen._preloaded_x)} validation samples (absolute)")
+
     # --- Train ---
     model.fit(
         train_gen,
+        validation_data=val_gen,  # ✅ Uses pre-loaded data internally
         epochs=config["epochs"],
         steps_per_epoch=config["steps_per_epoch"],
-        callbacks=config["callbacks"],
+        callbacks=callbacks,
         verbose=1,
     )
 
@@ -298,7 +379,7 @@ def save_encoder(model, path):
     model.summary()
     if encoder:
         print(f"💾 Saving shared encoder weights to {path}")
-        dummy = tf.zeros((1, 13, 4, 1))
+        dummy = tf.zeros((1, 13, 4, 2))
         encoder(dummy, training=False)
         print(model.built)
         encoder.save(path)

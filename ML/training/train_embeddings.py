@@ -1,6 +1,8 @@
 import sys, os
 import tensorflow as tf
 import numpy as np
+import time
+
 from keras import ops
 from keras.layers import Lambda
 
@@ -83,18 +85,23 @@ def evaluate_model_old(model, data):
 
 def main():
 
+    start_time = time.time()
+
     config = get_config()
     summarize_config(config)
     model = train_embeddings(config=config)
     
+    end_time = time.time()
+    print("Training time: ", end_time - start_time)
+    
     # --- Evaluate after training ---
     print("\n🔍 Running post-training evaluation...")
-    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="hand")
+    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="mix")
 
     if config["mode"] == "absolute_value":
-        evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=10)
+        evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=20)
     else:
-        evaluate_model(model, iter(eval_gen), model_type='pairwise', num_examples=10)
+        evaluate_model(model, iter(eval_gen), model_type='pairwise', num_examples=50)
 
 if __name__ == "__main__":
     main()

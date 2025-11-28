@@ -71,7 +71,10 @@ def create_tensor_grids(mode, rows):
             inputs_A.append(grid_A)
             inputs_B.append(grid_B)
             
-            labels.append(1.0 if high_value_A < high_value_B else 0.0)
+            if high_value_A == high_value_B:
+                labels.append(0.5)
+            else:
+                labels.append(1.0 if high_value_A < high_value_B else 0.0)
 
     if mode == "absolute_value":
         x = tf.convert_to_tensor(np.stack(inputs))
@@ -155,6 +158,9 @@ class BaseGenerator(tf.keras.utils.Sequence):
         self.mode = config.get("mode", "absolute_value")
         self.modes = ["board", "hand", "mix"]
         self.mode_index = 0
+        self.is_validation = config.get("is_validation", False)  # ✅ NEW FLAG
+        self._preloaded_x = None  # ✅ Cache for validation data
+        self._preloaded_y = None
 
     # def __init__(self, db, batch_size, mode):
         # self.db = db
@@ -165,6 +171,12 @@ class BaseGenerator(tf.keras.utils.Sequence):
         return 100 # unused ?
 
     def __getitem__(self, idx):
+        if self.is_validation and self._preloaded_x is not None:
+            # ✅ Use pre-loaded validation data, slice it
+            start = (idx * self.batch_size) % len(self._preloaded_x)
+            end = start + self.batch_size
+            return self._preloaded_x[start:end], self._preloaded_y[start:end]
+        
         if self.mode in ["board", "hand", "mix"]:
             return self.db.get_comparison_pairs(self.mode, self.db_batch_size)
         elif self.mode == "alternating":
@@ -189,7 +201,8 @@ class AbsoluteGenerator(BaseGenerator):
     """Fetches absolute combo value samples for regression training."""
     def __init__(self, config):
         super().__init__(config)
-        self.x, self.y = self._load_new_batch()
+        if not self.is_validation:
+            self.x, self.y = self._load_new_batch()
 
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
@@ -198,34 +211,44 @@ class AbsoluteGenerator(BaseGenerator):
         return x_tensor.numpy(), y_tensor.numpy()
 
     def __len__(self):
+        if self.is_validation and self._preloaded_x is not None:
+            return max(1, len(self._preloaded_x) // self.batch_size)
         return self.db_batch_size // self.batch_size
     
     def __getitem__(self, idx):
-        """ Return one sub-batch. """
-        # rows = self.db.get_sample_evaluations(self.db_batch_size)
-        # x, y = create_tensor_grids(rows)
-        # Select a slice to yield this step
+        if self.is_validation and self._preloaded_x is not None:
+            # ✅ Slice pre-loaded validation data
+            start = (idx * self.batch_size) % len(self._preloaded_x)
+            end = start + self.batch_size
+            y_batch = self._preloaded_y[start:end]
+            return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
+        
+        # Training mode: load fresh batch each call
+        if not hasattr(self, 'x'):
+            self.x, self.y = self._load_new_batch()
+        
         start = (idx * self.batch_size) % len(self.x)
         end = start + self.batch_size
         y_batch = self.y[start:end]
         return self.x[start:end], (y_batch, y_batch, y_batch)
-        # return self.x[start:end], self.y[start:end]
 
     def on_epoch_end(self):
-        """ Reload data at end of each epoch. """
-        self.x, self.y = self._load_new_batch()
+        """ Reload data at end of each epoch (training only). """
+        if not self.is_validation:
+            self.x, self.y = self._load_new_batch()
 
 
 # ==========================================================
 # Pairwise generator (supervised regression)
 # ==========================================================
 class PairwiseGenerator(BaseGenerator):
-    """Fetches absolute combo value samples for regression training."""
+    """Fetches pairwise comparison samples for training."""
     def __init__(self, config, mode_override=None):
         super().__init__(config)
         if mode_override != None:
             self.mode = mode_override
-        self.x, self.y = self._load_new_batch()
+        if not self.is_validation:
+            self.x, self.y = self._load_new_batch()
 
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
@@ -234,41 +257,55 @@ class PairwiseGenerator(BaseGenerator):
         return x_tensor, y_tensor
 
     def __len__(self):
+        if self.is_validation and self._preloaded_x is not None:
+            return max(1, len(self._preloaded_x[0]) // self.batch_size)
         return self.db_batch_size // self.batch_size
     
     def __getitem__(self, idx):
-        """ Return one sub-batch. """
-        # Select a slice to yield this step
-        start = (idx * self.batch_size) % len(self.x)
+        if self.is_validation and self._preloaded_x is not None:
+            # ✅ Slice pre-loaded validation data
+            start = (idx * self.batch_size) % len(self._preloaded_x[0])
+            end = start + self.batch_size
+            
+            x_A = self._preloaded_x[0][start:end]
+            x_B = self._preloaded_x[1][start:end]
+            y_batch = self._preloaded_y[start:end]
+            
+            return (x_A, x_B), (y_batch, y_batch, y_batch)
+        
+        # Training mode: load fresh batch each call
+        if not hasattr(self, 'x'):
+            self.x, self.y = self._load_new_batch()
+        
+        start = (idx * self.batch_size) % len(self.x[0])
         end = start + self.batch_size
-
+        
         x_A = self.x[0][start:end]
         x_B = self.x[1][start:end]
-
         y_batch = self.y[start:end]
-
+        
         return (x_A, x_B), (y_batch, y_batch, y_batch)
-        # return self.x[start:end], self.y[start:end]
 
     def on_epoch_end(self):
-        """ Reload data at end of each epoch. """
-        self.x, self.y = self._load_new_batch()
+        """ Reload data at end of each epoch (training only). """
+        if not self.is_validation:
+            self.x, self.y = self._load_new_batch()
 
-  
+
 # ==========================================================
 # Alternating generator (mixes pair types)
 # ==========================================================
 class AlternatingGenerator(PairwiseGenerator):
     """Mixes 'board' and 'hand' pair types dynamically."""
     def __init__(self, config, cycle=("board", "hand", "mix")):
-        BaseGenerator.__init__(self, config)  # Call grandparent directly
-        # super().__init__(config, mode="alternating")
+        BaseGenerator.__init__(self, config)
         self.mode = "alternating"
         self.cycle = itertools.cycle(cycle)
         self.mix_ratio = config.get("mix_ratio", None)
 
         self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
-        self.x, self.y = self._load_new_batch()
+        if not self.is_validation:
+            self.x, self.y = self._load_new_batch()
 
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
@@ -277,144 +314,40 @@ class AlternatingGenerator(PairwiseGenerator):
         return x_tensor, y_tensor
 
     def __len__(self):
+        if self.is_validation and self._preloaded_x is not None:
+            return max(1, len(self._preloaded_x[0]) // self.batch_size)
         return self.db_batch_size // self.batch_size
     
     def __getitem__(self, idx):
-        """ Return one sub-batch. """
-        # Select a slice to yield this step
-        start = (idx * self.batch_size) % len(self.x)
+        if self.is_validation and self._preloaded_x is not None:
+            # ✅ Slice pre-loaded validation data
+            start = (idx * self.batch_size) % len(self._preloaded_x[0])
+            end = start + self.batch_size
+            
+            x_A = self._preloaded_x[0][start:end]
+            x_B = self._preloaded_x[1][start:end]
+            y_batch = self._preloaded_y[start:end]
+            
+            return (x_A, x_B), (y_batch, y_batch, y_batch)
+        
+        # Training mode: load fresh batch each call
+        if not hasattr(self, 'x'):
+            self.x, self.y = self._load_new_batch()
+        
+        start = (idx * self.batch_size) % len(self.x[0])
         end = start + self.batch_size
-
+        
         x_A = self.x[0][start:end]
         x_B = self.x[1][start:end]
-
         y_batch = self.y[start:end]
-
+        
         return (x_A, x_B), (y_batch, y_batch, y_batch)
 
-
     def on_epoch_end(self):
-        """Reload data with next mode in cycle."""
-        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
-        self.x, self.y = self._load_new_batch()
-
-
-
-
-# ==========================================================
-# Alternating generator (mixes pair types)
-# ==========================================================
-class AlternatingGeneratorOld(PairwiseGenerator):
-    """Mixes 'board' and 'hand' pair types dynamically."""
-    def __init__(self, config, cycle=("board", "hand")):
-        BaseGenerator.__init__(self, config)  # Call grandparent directly
-        # super().__init__(config, mode="alternating")
-        self.mode = "alternating"
-        self.cycle = itertools.cycle(cycle)
-        self.mix_ratio = config.get("mix_ratio", None)
-
-        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
-        self.x1, self.x2, self.y = self._load_batch_with_mode(self.current_mode)
-
-    def __getitem__(self, idx):
-        """Return one sub-batch."""
-        start = (idx * self.batch_size) % len(self.y)
-        end = start + self.batch_size
-
-        # batch = (
-        #     self.x1[0][start:end],
-        #     self.x1[1][start:end],
-        #     self.x1[2][start:end],
-        
-        #     self.x2[0][start:end],
-        #     self.x2[1][start:end],
-        #     self.x2[2][start:end]
-        # )
-
-        x1_batch = (
-            self.x1[0][start:end],
-            self.x1[1][start:end],
-            self.x1[2][start:end]
-        )
-        
-        x2_batch = (
-            self.x2[0][start:end],
-            self.x2[1][start:end],
-            self.x2[2][start:end]
-        )
-        
-        y_batch = self.y[start:end]
-        
-        return (x1_batch, x2_batch), (y_batch, y_batch, y_batch)
-        # return (x1_batch, x2_batch), (y_batch, y_batch, y_batch)
-
-    # def __getitem__(self, idx):
-    #     mode = next(self.cycle)
-
-    #     if self.mix_ratio is not None:
-    #         mode = np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
-
-    #     return self.db.get_comparison_pairs(mode, self.db_batch_size)
-
-    def _load_batch_with_mode(self, mode):
-        """Load batch using specific mode."""
-        print("⏳ Querying DB...")
-        rows = self.db.get_comparison_pairs(mode, self.db_batch_size)
-        print(f"✅ DB returned {len(rows)} rows")
-        # if rows:
-        #     print("Example row:", rows[0])
-
-        hands_a, hands_b, boards_a, boards_b, values_a, values_b = self.unpack_rows(rows)
-
-        # print("Hands A:", bitmask_to_cards(hands_a[0]))
-        # print("Boards A:", bitmask_to_cards(boards_a[0]))
-
-        # print("Hands B:", bitmask_to_cards(hands_b[0]))
-        # print("Boards B:", bitmask_to_cards(boards_b[0]))
-
-        # print("values:", values_a[0], values_b[0])
-
-        x1, x2 = create_pairwise_tensor_grids(hands_a, hands_b, boards_a, boards_b)
-
-        y = (values_a <= values_b).astype("float32")
-        # y = (values_a > values_b).astype("float32")
-        y_tensor = tf.convert_to_tensor(y)[..., None]
-
-        self.last_batch_values_A = values_a
-        self.last_batch_values_B = values_b
-
-        print("sample values:", values_a[:10], values_b[:10], "labels:", y[:10].ravel())
-
-        self.x1 = (
-            x1[0].numpy(),
-            x1[1].numpy(),
-            x1[2].numpy()
-        )
-
-        self.x2 = (
-            x2[0].numpy(),
-            x2[1].numpy(),
-            x2[2].numpy()
-        )
-
-        self.y = y_tensor.numpy()
-        return self.x1, self.x2, self.y
-    
-
-        # return (
-        #     (x1[0].numpy(), x1[1].numpy(), x1[2].numpy()),
-        #     (x2[0].numpy(), x2[1].numpy(), x2[2].numpy()),
-        #     y_tensor.numpy()
-        # )    
-
-    def on_epoch_end(self):
-        """Reload data with next mode in cycle."""
-        self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
-        self.x1, self.x2, self.y = self._load_batch_with_mode(self.current_mode)
-    # def __iter__(self):
-    #     while True:
-    #         mode = random.choices(["board", "hand", "mixed"], self.probs)[0]
-    #         yield BaseGenerator(self.db, self.batch_size, mode).__getitem__(0)
+        """Reload data with next mode in cycle (training only)."""
+        if not self.is_validation:
+            self.current_mode = next(self.cycle) if not self.mix_ratio else np.random.choice(["board", "hand", "mix"], p=self.mix_ratio)
+            self.x, self.y = self._load_new_batch()
 
 
 

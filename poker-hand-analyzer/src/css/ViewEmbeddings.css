@@ -1,0 +1,70 @@
+.view-embeddings {
+    background-color: #228B22;  /* dark green felt */
+    border: 3px solid #2F4F2F;  /* same slate border */
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 24px;
+
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4),
+                0 4px 12px rgba(0, 0, 0, 0.3);
+    color: #EEE;
+}
+
+.embedding-hands-container {
+    display: flex;
+    flex-direction: row;
+    gap: 32px;
+    margin-top: 24px;
+    padding: 16px 8px;
+
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 10px;
+}
+
+
+.ve-button {
+    padding: 6px 12px;
+    background-color: #0066CC;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.ve-button:hover {
+    background-color: #1A7FE0;
+}
+
+.ve-button:active {
+    transform: scale(0.97);
+}
+
+.ve-button-secondary {
+    padding: 4px 10px;
+    border: 1px solid #AAA;
+    background-color: #333;
+    color: #EEE;
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+.ve-button-secondary:hover {
+    background-color: #444;
+}
+
+.embedding-hand-block {
+    background: rgba(0, 0, 0, 0.25);
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.4);
+}
+
+.view-embeddings h2 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 1.8rem;
+    font-weight: 600;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
