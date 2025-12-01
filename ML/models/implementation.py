@@ -31,7 +31,7 @@ class PokerCNNEncoder(Model):
         self.filters = config["filters"]
         self.kernel_size = config["kernel_size"]
         self.embedding_dim = config["embedding_dim"]
-        self.use_equivariance = config["use_equivariance"]
+        self.use_equivariance = False #config["use_equivariance"]
         
     # def __init__(self, input_shape, filters=(8, 16, 32), kernel_size=2, embedding_dim=32, use_equivariance=True, **kwargs):
     #     super().__init__(**kwargs)
@@ -51,19 +51,50 @@ class PokerCNNEncoder(Model):
         self.dense2 = layers.Dense(64, activation="relu")
         self.dropout = layers.Dropout(0.2)
         self.embedding = layers.Dense(self.embedding_dim, activation=None)  # <-- embeddings live here
-        self.equiv = SuitEquivariantLayer(pooling="mean")
+        self.l2_norm = layers.Lambda(lambda t: tf.nn.l2_normalize(t, axis=-1))
+        self.equiv = SuitPermutationLayer()
+        # self.equiv = SuitEquivariantLayer(pooling="max")
 
         # Build model by calling once (if using subclassing)
         # self.build((None, *input_shape))
 
+    def call_proposed(self, inputs, training=False):
+        # inputs shape: (batch, 13, 4, channels)
+        if self.use_equivariance:
+            # Apply permutation layer (output: batch, 24, 13, 4, channels)
+            x = self.equiv(inputs) # equiv is SuitPermutationLayer here
+            # Merge batch and permutation dims to process all permuted copies at once:
+            batch_size = tf.shape(x)[0]
+            num_perms = tf.shape(x)[1]
+            x = tf.reshape(x, (batch_size * num_perms, 13, 4, inputs.shape[-1]))
+        else:
+            x = inputs
+
+        for conv, bn in zip(self.convs, self.bn):
+            x = conv(x)
+            x = bn(x, training=training)
+
+        x = self.flatten(x)
+        x = self.dense1(x)
+        x = self.dropout(x, training=training)
+        x = self.dense2(x)
+        x = self.dropout(x, training=training)
+        x = self.embedding(x) # shape: (batch*num_perms, embedding_dim)
+
+        if self.use_equivariance:
+            # reshape back: (batch, num_perms, embedding_dim)
+            x = tf.reshape(x, (batch_size, num_perms, self.embedding_dim))
+
+        return x
+
+
     def call(self, inputs, training=False):
-        if self.equiv is not None:
+        # Only apply permutation layer if use_equivariance is True
+        if self.use_equivariance and self.equiv is not None:
             x = self.equiv(inputs)
         else:
             x = inputs
-        # x = SuitEquivariantLayer(pooling="mean")(x)
-        # x = tf.expand_dims(x, axis=-1) # add channel dim for Conv2D
-        # x = layers.Conv2D(8, (2, 2), padding="same", activation="relu")(x)
+
         for conv, bn in zip(self.convs, self.bn):
             x = conv(x)
             x = bn(x, training=training)
@@ -73,6 +104,7 @@ class PokerCNNEncoder(Model):
         x = self.dense2(x)
         x = self.dropout(x, training=training)
         x = self.embedding(x)
+        x = self.l2_norm(x)
         return x  # embedding vector
 
     def get_config(self):
@@ -185,9 +217,83 @@ class PokerValueHeads(tf.keras.Model):
         return cls(encoders=encoders, activation=activation, **config)
 
 @register_keras_serializable(package="Poker")
-class SuitEquivariantLayer(tf.keras.layers.Layer):
-    def __init__(self, pooling="mean", **kwargs):
+class SuitPermutationLayer(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.perms = list(itertools.permutations(range(4)))
+
+    def call(self, inputs):
+        # inputs: (batch, 13, 4, channels)
+        permuted = []
+        for perm in self.perms:
+            permuted.append(tf.gather(inputs, indices=list(perm), axis=2))
+        # Stack on new axis for permutations
+        return tf.stack(permuted, axis=1) # shape: (batch, 24, 13, 4, channels)
+    
+    def get_config(self):
+        return super().get_config()
+
+
+@register_keras_serializable(package="Poker")
+class SuitEquivariantLayer(tf.keras.layers.Layer):
+    """
+    Make representation invariant to relabelling of suits (global permutation).
+    For each of the 24 suit permutations we permute the suit axis, compute
+    the permuted inputs, then pool (max) across permutations. This yields
+    a representation invariant to global relabelling of suits while
+    preserving suit-structure (suited vs offsuit).
+    """
+    def __init__(self, pooling="max", **kwargs):
+        super().__init__(**kwargs)
+        if pooling not in ("max", "mean"):
+            raise ValueError("pooling must be 'max' or 'mean'")
+        self.pooling = pooling
+        # store permutations as a Python list of index tuples for clarity
+        self.perms = list(itertools.permutations(range(4)))
+
+    def call(self, inputs):
+        # Expect inputs shape: (batch, 13, 4, channels)
+        # We'll permute axis=2 (suit axis)
+        # Build a list of permuted tensors, one per permutation
+        # Each permuted tensor has shape (batch, 13, 4, channels)
+        permuted = []
+        for perm in self.perms:
+            permuted.append(tf.gather(inputs, indices=list(perm), axis=2))
+
+        # Stack: shape (batch, 24, 13, 4, channels)
+        X_perm = tf.stack(permuted, axis=1)
+
+        # Pool across the permutation axis to enforce invariance.
+        if self.pooling == "max":
+            X_pooled = tf.reduce_max(X_perm, axis=1)
+        else:
+            X_pooled = tf.reduce_mean(X_perm, axis=1)
+
+        # Result shape: (batch, 13, 4, channels)
+        return X_pooled
+
+    def get_config(self):
+        base = super().get_config()
+        base.update({"pooling": self.pooling})
+        return base
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+
+@register_keras_serializable(package="Poker")
+class SuitEquivariantLayer_old(tf.keras.layers.Layer):
+    """
+    Make representation invariant to relabelling of suits (global permutation).
+    For each of the 24 suit permutations we permute the suit axis, compute
+    the permuted inputs, then pool (max) across permutations. This yields
+    a representation invariant to global relabelling of suits while
+    preserving suit-structure (suited vs offsuit).
+    """
+    def __init__(self, pooling="max", **kwargs):
+        super().__init__(**kwargs)
+        if pooling not in ("max", "mean"):
+            raise ValueError("pooling must be 'max' or 'mean'")
         self.pooling = pooling
         self.P = get_permutation_matrices(4)    # shape (24, 4, 4)
 
@@ -452,163 +558,6 @@ def build_pairwise_model(config):
 
     return model
 
-# @register_keras_serializale(package="Poker")
-# class PairwiseComparisonModel(tf.keras.Model):
-#     """
-#     Takes embeddings for A and B, and outputs sigmoid probability that A > B.
-#     Uses difference vector and small MLP.
-#     """
-#     def __init__(self, config):
-#         super().__init__(**kwargs)
-
-#         self.hand_encoder = hand_encoder
-#         self.board_encoder = board_encoder
-#         self.combined_encoder = combined_encoder
-
-#         self.rank_head = keras.Sequential([
-#             layers.Dense(128, activation="relu"),
-#             layers.Dense(64, activation="relu"),
-#             layers.Dense(1, activation="sigmoid"),
-#         ])
-
-#     def call(self, inputs, training=False):
-#         (
-#             hand_A, board_A,
-#             hand_B, board_B
-#         ) = inputs
-        
-#         hA = self.hand_encoder()
-
-#         self.embedding_dim = config["embedding_dim"]
-#         self.hidden_units = config["hidden_units"]
-#         self.activation = "relu"
-#         self.final_activation = "sigmoid"
-
-#         self.subtract = layers.Subtract()
-
-
-
-
-# @register_keras_serializable(package="Poker")
-# class PairwiseModel(tf.keras.Model):
-#     """
-#     Compares two combos across hand, board, and combined encoders.
-#     Each encoder-head path outputs P(x1 > x2) for that representation.
-#     """
-#     def __init__(self, value_heads, activation="sigmoid", **kwargs):
-#         """
-#         Args:
-#             value_heads: PokerValueHeads instance with hand_value, board_value, combined_value
-#             activation: activation for final output (typically sigmoid)
-#         """
-#         super().__init__(**kwargs)
-#         self.value_heads = value_heads
-
-#         self.hand_diff = tf.keras.layers.Subtract()
-#         self.board_diff = tf.keras.layers.Subtract()
-#         self.combined_diff = tf.keras.layers.Subtract()
-
-#         self.hand_output = tf.keras.layers.Dense(1, activation=activation, name="hand_comparison")
-#         self.board_output = tf.keras.layers.Dense(1, activation=activation, name="board_comparison")
-#         self.combined_output = tf.keras.layers.Dense(1, activation=activation, name="combined_comparison")
-
-#         self.activation = activation
-
-#         # self._pairwise_config = {"base_model_class": base_model.__class__.__name__, "activation": activation}
-
-#     def call(self, inputs, training=False, return_all=True):
-#     # def call(self, inputs, training=False, return_all=False):
-#         """
-#         Args:
-#             inputs: tuple of (x1, x2) where each is (hand, board, combo)
-#             training: whether in training mode
-#             return_all: if True, return (hand_prob, board_prob, combined_prob)
-#                        if False, return only combined_prob
-        
-#         Returns:
-#             Probability that x1 > x2 for each encoder type
-#         """
-#         x1, x2 = inputs
-
-#         hand1, board1, combo1 = x1        
-#         hand2, board2, combo2 = x2        
-
-#         hand_v1, board_v1, combined_v1 = self.value_heads(
-#             [hand1, board1, combo1], training=training, return_all=True
-#         )
-#         hand_v2, board_v2, combined_v2 = self.value_heads(
-#             [hand2, board2, combo2], training=training, return_all=True
-#         )
-
-#         hand_diff = self.hand_diff([hand_v1, hand_v2])
-#         board_diff = self.board_diff([board_v1, board_v2])
-#         combined_diff = self.combined_diff([combined_v1, combined_v2])
-
-#         hand_prob = self.hand_output(hand_diff)
-#         board_prob = self.board_output(board_diff)
-#         combined_prob = self.combined_output(combined_diff)
-
-#         # valueA = combined_v1
-#         # valueB = combined_v2
-
-#         if return_all:
-#             return hand_prob, board_prob, combined_prob#, valueA, valueB
-        
-#         return combined_prob
-
-#     def get_config(self):
-#         base = super().get_config()
-#         # base.update({"config": dict(self._pairwise_config)})        
-#         base.update({
-#             "value_heads_config": self.value_heads.get_config(),
-#             "activation": self.activation,
-#         })
-#         return base
-
-#     @classmethod
-#     def from_config(cls, config):
-#         activation = config.pop("activation", "sigmoid")
-#         vh_cfg = config.pop("value_heads_config", None)
-#         if vh_cfg == None:
-#                 raise ValueError("value_heads_config is required to reconstruct PairwiseModel")
-    
-#         value_heads = PokerValueHeads.from_config(vh_cfg)
-
-#         return cls(value_heads=value_heads, activation=activation, **config)
-
-#     @property
-#     def encoder_input_shape(self):
-#         # Match the encoder’s expected shape from config
-#         return (13, 4, 1)
-
-# def build_pairwise_model(config: dict, encoders: Optional[PokerComboModel] = None) -> tf.keras.Model:
-#     """Build a pairwise comparison model with three encoder-head paths."""
-
-#     # Create the shared encoders and value heads
-#     encoder_cfg = get_encoder_config(config)
-#     if encoders is None:
-#         encoders = create_encoders(encoder_cfg)
-#         # encoders = PokerComboModel(encoder_cfg)
-    
-#     value_heads = PokerValueHeads(encoders, activation=config.get("activation", "sigmoid"))
-#     pairwise_model = PairwiseModel(value_heads, activation="sigmoid")
-
-#     dummy_input = (
-#         (
-#         tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1)))),
-#         tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1)))),
-#         tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1)))),
-#         ),
-#         (
-#         tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1)))),
-#         tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1)))),
-#         tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1)))),
-#         ),
-#     )
-
-#     _ = pairwise_model(dummy_input, training=False, return_all=True)
-
-#     return pairwise_model
 
 def create_encoders(config: dict) -> PokerComboModel:
     """Create a PokerComboModel (shared encoders) and build its sub-encoders.
@@ -648,9 +597,46 @@ def get_encoder_config(global_config):
         "use_equivariance": global_config["use_equivariance"],
     }
 
+
+# import tensorflow as tf
+import numpy as np
+
+def one_hot_grid_for_cards(cards, mode="combined"):
+    # helper similar to your cards_to_tensor but produces (13,4,1) grid for a single set
+    rank_to_idx = {'A':0,'K':1,'Q':2,'J':3,'T':4,'9':5,'8':6,'7':7,'6':8,'5':9,'4':10,'3':11,'2':12}
+    suit_to_idx = {'s':0,'h':1,'d':2,'c':3}
+    grid = np.zeros((13,4,1), dtype=np.float32)
+    for card in cards:
+        r = card[0].upper(); s = card[-1].lower()
+        if r in rank_to_idx and s in suit_to_idx:
+            grid[rank_to_idx[r], suit_to_idx[s], 0] = 1.0
+    return tf.constant(grid)
+
+
 def main():
-    mat = get_permutation_matrices(4)
-    print(mat)
+    # mat = get_permutation_matrices(4)
+    # print(mat)
+
+    # hands:
+    JhTh = one_hot_grid_for_cards(["Jh","Th"])   # suited hearts
+    JdTd = one_hot_grid_for_cards(["Jd","Td"])   # suited diamonds (should match JhTh)
+    JhTd = one_hot_grid_for_cards(["Jh","Td"])   # offsuit (should differ)
+
+    batch = tf.stack([JhTh, JdTd, JhTd], axis=0)  # shape (3,13,4,1)
+
+    layer = SuitEquivariantLayer(pooling="max")
+    out = layer(batch)  # shape (3,13,4,1)
+
+    # flatten embeddings per sample to compare (or pass through a tiny conv + flatten to mimic encoder)
+    flat = tf.reshape(out, (3, -1)).numpy()
+
+    # pairwise distances
+    d01 = np.linalg.norm(flat[0] - flat[1])
+    d02 = np.linalg.norm(flat[0] - flat[2])
+
+    print("dist JhTh-JdTd:", d01)
+    print("dist JhTh-JhTd:", d02)
+
 
 if __name__ == "__main__":
     main()

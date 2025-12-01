@@ -32,7 +32,7 @@ const Hand = ({
       {slots.map((cardObj, index) => (
         <DroppableSlot
         // <DroppableBoardSlot
-          key={index}
+          key={cardObj?.card || `slot-${seatNumber}-${index}`}
           index={index}
           variant={"player"}
           location={seatNumber}

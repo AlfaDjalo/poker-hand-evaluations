@@ -93,11 +93,18 @@ def main():
     
     end_time = time.time()
     print("Training time: ", end_time - start_time)
-    
+
     # --- Evaluate after training ---
     print("\n🔍 Running post-training evaluation...")
-    eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="mix")
+    # Make a validation config by copying and overriding is_validation
+    validation_config = config.copy()
+    validation_config["is_validation"] = True
 
+    # Then create the validation generator
+    eval_gen = AbsoluteGenerator(validation_config) if config["mode"] == "absolute_value" else PairwiseGenerator(validation_config, mode_override="mix")   
+    eval_gen.preload_validation_data()
+    # eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="mix")
+ 
     if config["mode"] == "absolute_value":
         evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=20)
     else:

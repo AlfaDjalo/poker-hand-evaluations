@@ -4,8 +4,8 @@ import numpy as np
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 # from ML.models.utils import load_model
-from models.implementation import build_value_model, build_pairwise_model
-from models.implementation import (
+from ML.models.implementation import build_value_model, build_pairwise_model
+from ML.models.implementation import (
     PokerComboModel,
     PokerValueModel,
     PokerValueHeads,
@@ -15,7 +15,7 @@ from models.implementation import (
     PairwiseComparisonModel,
     PairwiseComparisonHeads
 )
-from data.generators import AbsoluteGenerator, PairwiseGenerator, AlternatingGenerator, create_tensor_grids
+from ML.data.generators import AbsoluteGenerator, PairwiseGenerator, AlternatingGenerator, create_tensor_grids
 
 def load_value_model(path):
     return tf.keras.models.load_model(
@@ -74,6 +74,9 @@ def train_embeddings(config=None):
 
     # --- Paths ---
     save_dir = config["save_directory"]
+    hand_encoder_path = os.path.join(save_dir, config["hand_encoder_filename"])
+    board_encoder_path = os.path.join(save_dir, config["board_encoder_filename"])
+    combined_encoder_path = os.path.join(save_dir, config["combined_encoder_filename"])
     encoder_path = os.path.join(save_dir, config["encoder_filename"])
     abs_model_path = os.path.join(save_dir, config["absolute_model_filename"])
     pairwise_model_path = os.path.join(save_dir, config["pairwise_model_filename"])
@@ -97,7 +100,8 @@ def train_embeddings(config=None):
             model = build_pairwise_model(config) 
 
     if config["load_encoder_model"]:
-        load_encoder(model, encoder_path)
+        load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path)
+        # load_encoder(model, encoder_path)
 
     # --- Compile ---
     if mode=="absolute_value":
@@ -281,7 +285,9 @@ def train_embeddings(config=None):
         val_gen = PairwiseGenerator(val_config)
     elif mode == "alternating":
         val_gen = AlternatingGenerator(val_config)
-
+    
+    val_gen.preload_validation_data()
+    
     # ✅ Pre-load ONE large validation batch from database
     print("📊 Pre-loading validation batch...")
     
@@ -334,7 +340,8 @@ def train_embeddings(config=None):
         else:
             print(f"💾 Saving pairwise model to {pairwise_model_path}")
             model.save(pairwise_model_path)
-        save_encoder(model, encoder_path)
+        save_all_encoders(model, hand_encoder_path, board_encoder_path, combined_encoder_path)
+        # save_encoder(model, encoder_path)
     
     return model
 
@@ -385,6 +392,37 @@ def save_encoder(model, path):
         encoder.save(path)
     else:
         print("⚠️ No encoder found to save.")
+
+def save_all_encoders(model, hand_encoder_path, board_encoder_path, combined_encoder_path):
+    encoder = find_encoder(model)  # Get PokerComboModel
+    if not encoder:
+        print("⚠️ No encoder found to save")
+        return
+
+    # Save each encoder separately
+    encoder.hand_encoder.save(hand_encoder_path)
+    encoder.board_encoder.save(board_encoder_path)
+    encoder.combined_encoder.save(combined_encoder_path)
+
+    print("Saved hand, board and combined encoders.")
+
+def load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path):
+    hand = tf.keras.models.load_model(hand_encoder_path, compile=False)
+    board = tf.keras.models.load_model(board_encoder_path, compile=False)
+    combined = tf.keras.models.load_model(combined_encoder_path, compile=False)
+
+    encoder = find_encoder(model)
+    if not encoder:
+        print("⚠️ No encoder found in model")
+        return       
+
+    encoder.hand_encoder.set_weights(hand.get_weights())
+    encoder.board_encoder.set_weights(board.get_weights())
+    encoder.combined_encoder.set_weights(combined.get_weights())
+
+    print("✅ Loaded hand, board, and combined encoder weights into model")
+    
+    # return encoder
 
 def load_encoder(model, encoder_path):
     """Load encoder weights into model if encoder exists and file found."""

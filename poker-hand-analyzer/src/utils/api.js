@@ -40,6 +40,26 @@ export async function evaluateShowdown(playerHands, board) {
     return data;
 }
 
+export async function loadEmbeddings({ hands, mode }) {
+    const normalizedHands = hands.map(h => h.map(normalizeCardValue));
+    
+    console.log("Hands:", normalizedHands);
+    
+    const response = await fetch(`${API_URL}/embeddings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            embeddingHands: normalizedHands,
+            mode: mode
+        })
+    });
+
+    if (!response.ok) throw new Error("Embedding evaluation failed")
+
+    const data = await response.json();
+    return data;
+}
+
 function normalizeCardValue(c) {
   return typeof c === "string" ? c : c?.card;
 }

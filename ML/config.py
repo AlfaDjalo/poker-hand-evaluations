@@ -3,8 +3,7 @@ import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend")))
 
-# from db_plo import DB_PLO, open_db
-from data.load_db import open_db
+from ML.data.load_db import open_db
 from dataclasses import dataclass
 
 def get_config():
@@ -14,16 +13,16 @@ def get_config():
 
     config = {
         # ---- General ----
-        # "mode": "alternating",
-        "mode": "absolute_value",
+        "mode": "alternating",
+        # "mode": "absolute_value",
         "load_encoder_model": True,
         "load_head_model": True,
-        "save_model": False, #True,
+        "save_model": True,
 
         # ---- Database ----
         "db": db,
         "db_batch_size": 32000, #32000,
-        "model_batch_size": 1024,
+        "model_batch_size": 64, #1024,
 
         # ---- Model ----
         "input_shape": (13, 4, 2),
@@ -34,31 +33,31 @@ def get_config():
         "hand_embedding_dim": 32,
         "board_embedding_dim": 32,
         "combined_embedding_dim": 64,
-        "lr": 1e-3,
-        "lr_absolute_value": 1e-3,
-        "lr_pairwise": 1e-3,
+        "lr": 1e-4,
+        "lr_absolute_value": 1e-4,
+        "lr_pairwise": 1e-4,
         "loss_weights": [0.3, 0.3, 0.4],
         "activation": "sigmoid",
-        "use_equivariance": True,
+        "use_equivariance": False, #True,
 
         # ---- Training ----
-        "epochs": 100,
+        "epochs": 20,
         "steps_per_epoch": 500,
         # "callbacks": [],
         "mix_ratio": [0.45, 0.45, 0.1],
 
         # ---- Callback hyperparameters ----
         "reduce_lr": {
-            "monitor": "val_loss",
+            "monitor": "loss", #"val_loss",
             "factor": 0.5,
-            "patience": 6,
+            "patience": 5,
             "min_delta": 0.0, # added
             "min_lr": 1e-6
         },
         "early_stopping": {
-            "monitor": "val_loss",
-            "patience": 15,
-            "min_delta": 0.005, # added
+            "monitor": "loss", #"val_loss",
+            "patience": 12,
+            "min_delta": 0.01, # added
             "restore_best_weights": True
         },
         "checkpoint": {
@@ -67,7 +66,12 @@ def get_config():
 
         # ---- Paths ----
         "save_directory": os.path.join(base_dir, "models", "saved"),
+        "embeddings_directory": os.path.join(base_dir, "ML", "models", "embeddings"),
+        "hand_encoder_filename": "hand_encoder_model.keras",
+        "board_encoder_filename": "board_encoder_model.keras",
+        "combined_encoder_filename": "combined_encoder_model.keras",
         "encoder_filename": "encoder_model.keras",
+        # "embedding_filename": "embedding_model.keras",
         "absolute_model_filename": "poker_value_model.keras",
         "pairwise_model_filename": "poker_pairwise_model.keras",
         "log_dir": os.path.join(base_dir, "logs")

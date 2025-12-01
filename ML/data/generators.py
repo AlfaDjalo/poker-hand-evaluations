@@ -146,6 +146,33 @@ def bitmask_to_cards(bitmask):
     return cards
 
 
+def augment_batch_with_suit_permutations(batch_inputs):
+    """
+    batch_inputs: tensor of shape (batch_size, 13, 4, channels)
+    returns: tensor of shape (batch_size * 24, 13, 4, channels)
+    """
+    perms = list(itertools.permutations(range(4)))
+    batch_size = tf.shape(batch_inputs)[0]
+
+    # Prepare a list to store all permuted batches
+    permuted_batches = []
+
+    for perm in perms:
+        # permute suits by gathering on axis=2 (the suit axis)
+        permuted = tf.gather(batch_inputs, indices=list(perm), axis=2)
+        permuted_batches.append(permuted)
+
+    # Stack all permutations along new axis: shape (24, batch_size, 13, 4, channels)
+    permuted_batches = tf.stack(permuted_batches, axis=0)
+
+    # Transpose to (batch_size, 24, 13, 4, channels)
+    permuted_batches = tf.transpose(permuted_batches, perm=[1, 0, 2, 3, 4])
+    
+    # Merge batch and perm dimensions: (batch_size * 24, 13, 4, channels)
+    permuted_batches = tf.reshape(permuted_batches, (batch_size * 24, 13, 4, batch_inputs.shape[-1]))
+
+    return permuted_batches
+
 # ==========================================================
 # Base class
 # ==========================================================
@@ -192,7 +219,7 @@ class BaseGenerator(tf.keras.utils.Sequence):
 
     def encode_inputs(self, hands, boards):
         return self.encoder.encode(hands, boards)
-
+    
 
 # ==========================================================
 # Absolute value generator (supervised regression)
@@ -217,6 +244,29 @@ class AbsoluteGenerator(BaseGenerator):
     
     def __getitem__(self, idx):
         if self.is_validation and self._preloaded_x is not None:
+            # Slice pre-loaded validation data, no augmentation for validation
+            start = (idx * self.batch_size) % len(self._preloaded_x)
+            end = start + self.batch_size
+            y_batch = self._preloaded_y[start:end]
+            return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
+
+        if not hasattr(self, 'x'):
+            self.x, self.y = self._load_new_batch()
+
+        start = (idx * self.batch_size) % len(self.x)
+        end = start + self.batch_size
+
+        batch_x = self.x[start:end]
+        batch_y = self.y[start:end]
+
+        # Apply augmentation here (training only)
+        batch_x_aug = augment_batch_with_suit_permutations(batch_x)
+        batch_y_aug = np.repeat(batch_y, 24, axis=0) # repeat labels for augmentation batch
+
+        return batch_x_aug, (batch_y_aug, batch_y_aug, batch_y_aug)
+
+    def __getitem_old__(self, idx):
+        if self.is_validation and self._preloaded_x is not None:
             # ✅ Slice pre-loaded validation data
             start = (idx * self.batch_size) % len(self._preloaded_x)
             end = start + self.batch_size
@@ -236,6 +286,17 @@ class AbsoluteGenerator(BaseGenerator):
         """ Reload data at end of each epoch (training only). """
         if not self.is_validation:
             self.x, self.y = self._load_new_batch()
+
+    def preload_validation_data(self):
+        # Fetch a large validation batch from DB (no augmentation)
+        sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
+        
+        # Convert rows to tensors using existing helper
+        x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        
+        # Cache the numpy arrays for slicing in __getitem__
+        self._preloaded_x = x_tensor.numpy()
+        self._preloaded_y = y_tensor.numpy()
 
 
 # ==========================================================
@@ -260,8 +321,40 @@ class PairwiseGenerator(BaseGenerator):
         if self.is_validation and self._preloaded_x is not None:
             return max(1, len(self._preloaded_x[0]) // self.batch_size)
         return self.db_batch_size // self.batch_size
-    
+        
     def __getitem__(self, idx):
+        if self.is_validation and self._preloaded_x is not None:
+            # Validation mode: no augmentation
+            start = (idx * self.batch_size) % len(self._preloaded_x[0])
+            end = start + self.batch_size
+            
+            x_A = self._preloaded_x[0][start:end]
+            x_B = self._preloaded_x[1][start:end]
+            y_batch = self._preloaded_y[start:end]
+            
+            return (x_A, x_B), (y_batch, y_batch, y_batch)
+        
+        # Training mode: load fresh batch if needed
+        if not hasattr(self, 'x'):
+            self.x, self.y = self._load_new_batch()
+        
+        start = (idx * self.batch_size) % len(self.x[0])
+        end = start + self.batch_size
+        
+        x_A = self.x[0][start:end]  # shape (batch_size, 13, 4, channels)
+        x_B = self.x[1][start:end]
+        y_batch = self.y[start:end]
+
+        # Augment inputs with suit permutations
+        x_A_aug = augment_batch_with_suit_permutations(x_A)  # (batch_size*24, 13, 4, channels)
+        x_B_aug = augment_batch_with_suit_permutations(x_B)
+
+        # Repeat labels for augmented batch size
+        y_batch_aug = np.repeat(y_batch, 24, axis=0)
+
+        return (x_A_aug, x_B_aug), (y_batch_aug, y_batch_aug, y_batch_aug)
+
+    def __getitem_old__(self, idx):
         if self.is_validation and self._preloaded_x is not None:
             # ✅ Slice pre-loaded validation data
             start = (idx * self.batch_size) % len(self._preloaded_x[0])
@@ -290,6 +383,15 @@ class PairwiseGenerator(BaseGenerator):
         """ Reload data at end of each epoch (training only). """
         if not self.is_validation:
             self.x, self.y = self._load_new_batch()
+
+    def preload_validation_data(self):
+        # Always validate on 'mix'
+        val_mode = "mix"
+        sample_evaluations = self.db.get_comparison_pairs(val_mode, self.db_batch_size)
+        x_tensor, y_tensor = create_tensor_grids(val_mode, sample_evaluations)
+
+        self._preloaded_x = (x_tensor[0].numpy(), x_tensor[1].numpy())
+        self._preloaded_y = y_tensor.numpy()
 
 
 # ==========================================================

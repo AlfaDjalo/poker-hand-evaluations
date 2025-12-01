@@ -97,10 +97,10 @@ export function usePokerDnD({
                 // ViewEmbeddings format
                 setHands(prev => {
                     // Before applying the update:
-                    const targetHand = prev[seat];
+                    const targetHand = prev[seat].cards;
     
                     // Determine the card we want to drop:
-                    const { rank, suit } = card;
+                    // const { rank, suit } = card;
     
                     // Check for duplicates in the same hand (except the slot we’re replacing)
                     const alreadyUsed = targetHand.some((slot, i) =>
@@ -118,8 +118,11 @@ export function usePokerDnD({
                         return prev;
                     }
 
-                    const newHands = prev.map(h => [...h]);
-                    newHands[seat][slotIndex] = { card, hidden: false };
+                    const newHands = prev.map(h => ({
+                        ...h,
+                        cards: [...h.cards]
+                    }));
+                    newHands[seat].cards[slotIndex] = { card, hidden: false };
                     return newHands;
                 });
             }
@@ -168,14 +171,33 @@ export function usePokerDnD({
             // For ViewEmbeddings (hands array)
             else if (hands && setHands) {
                 setHands(prev => {
-                    const newHands = prev.map(h => [...h]);
+
+                    console.log("prev =", prev);
+                    // console.log("types =", prev.map(x => typeof x));
+
+                    const newHands = prev.map(h => ({
+                        ...h,
+                        cards: Array.isArray(h?.cards) ? [...h.cards] : [null, null, null, null, null],
+                        embedding: h?.embedding ?? null
+                    }));
+
+                    const ensureSlot = (handObj, idx) => {
+                        if (!Array.isArray(handObj.cards)) handObj.cards = [null, null, null, null, null];
+                        while (handObj.cards.length < 5) handObj.cards.push(null); // ***** hardcoded handlength
+                    }
+
+                    ensureSlot(newHands[sourceSeat]);
+                    ensureSlot(newHands[targetSeat]);
 
                     if (sourceSeat === targetSeat) {
-                        [newHands[sourceSeat][sourceData.index], newHands[targetSeat][targetData.index]] =
-                        [newHands[targetSeat][targetData.index], newHands[sourceSeat][sourceData.index]]
+                        const tmp = newHands[sourceSeat].cards[sourceData.index];
+                        newHands[sourceSeat].cards[sourceData.index] = newHands[targetSeat].cards[targetData.index];
+                        newHands[targetSeat].cards[targetData.index] = tmp;
                     } else {
-                        [newHands[sourceSeat][sourceData.index], newHands[targetSeat][targetData.index]] =
-                        [newHands[targetSeat][targetData.index], newHands[sourceSeat][sourceData.index]]
+                        const a = newHands[sourceSeat].cards[sourceData.index];
+                        const b = newHands[targetSeat].cards[targetData.index];
+                        newHands[sourceSeat].cards[sourceData.index] = b;
+                        newHands[targetSeat].cards[targetData.index] = a;
                     }
 
                     return newHands;
@@ -191,40 +213,40 @@ export function usePokerDnD({
         const handIndex = sourceData.variant === "player" ? sourceData.index : targetData.index;
 
         if (players && setPlayers) {
-        // EquityCalculator format
-        const boardCard = boardCards[boardIndex];
-        const handCard = players[handSeat].hand[handIndex];
+            // EquityCalculator format
+            const boardCard = boardCards[boardIndex];
+            const handCard = players[handSeat].hand[handIndex];
 
-        setBoardCards(prev => {
-            const newBoard = [...prev];
-            newBoard[boardIndex] = handCard;
-            return newBoard;
-        });
+            setBoardCards(prev => {
+                const newBoard = [...prev];
+                newBoard[boardIndex] = handCard;
+                return newBoard;
+            });
 
-        setPlayers(prev => {
-            const updated = { ...prev };
-            const hand = [...updated[handSeat].hand];
-            hand[handIndex] = boardCard;
-            updated[handSeat] = { ...updated[handSeat], hand };
-            return updated;
-        });
-        } else if (hands && setHands) {
-        // ViewEmbeddings format
-        const boardCard = boardCards[boardIndex];
-        const handCard = hands[handSeat][handIndex];
+            setPlayers(prev => {
+                const updated = { ...prev };
+                const hand = [...updated[handSeat].hand];
+                hand[handIndex] = boardCard;
+                updated[handSeat] = { ...updated[handSeat], hand };
+                return updated;
+            });
+        } //else if (hands && setHands) {
+            // ViewEmbeddings format
+            // const boardCard = boardCards[boardIndex];
+            // const handCard = hands[handSeat][handIndex];
 
-        setBoardCards(prev => {
-            const newBoard = [...prev];
-            newBoard[boardIndex] = handCard;
-            return newBoard;
-        });
+            // setBoardCards(prev => {
+            //     const newBoard = [...prev];
+            //     newBoard[boardIndex] = handCard;
+            //     return newBoard;
+            // });
 
-        setHands(prev => {
-            const newHands = prev.map(h => [...h]);
-            newHands[handSeat][handIndex] = boardCard;
-            return newHands;
-        });
-        }
+            // setHands(prev => {
+            //     const newHands = prev.map(h => [...h]);
+            //     newHands[handSeat][handIndex] = boardCard;
+            //     return newHands;
+            // });
+        // }
     };
 
     // Remove card (drop on selector)
@@ -232,33 +254,46 @@ export function usePokerDnD({
         console.log("🗑️ Dropped on selector (trash)");
 
         if (sourceData.variant === "board" && setBoardCards) {
-        setBoardCards(prev => {
-            const newBoard = [...prev];
-            newBoard[sourceData.index] = null;
-            return newBoard;
-        });
-        } 
-        else if (sourceData.variant === "player") {
-        const seat = sourceData.location;
-
-        if (players && setPlayers) {
-            setPlayers(prev => {
-                const updated = { ...prev };
-                const hand = [...updated[seat].hand];
-                hand[sourceData.index] = null;
-                updated[seat] = { ...updated[seat], hand };
-                return updated;
+            setBoardCards(prev => {
+                const newBoard = [...prev];
+                newBoard[sourceData.index] = null;
+                return newBoard;
             });
-        } else if (hands && setHands) {
-            setHands(prev => {
-                const newHands = prev.map(h => [...h]);
-                newHands[seat][sourceData.index] = null;
-                return newHands;
-            });
-        }
-        }
-    };
+        } else if (sourceData.variant === "player") {
+            const seat = sourceData.location;
 
+            if (players && setPlayers) {
+                setPlayers(prev => {
+                    const updated = { ...prev };
+                    const hand = [...updated[seat].hand];
+                    hand[sourceData.index] = null;
+                    updated[seat] = { ...updated[seat], hand };
+                    return updated;
+                });
+            } else if (hands && setHands) { 
+                const cardIndex = sourceData.index;
+
+                setHands(prev => {
+                    const next = prev.map(seat => ({
+                        ...seat,
+                        cards: [...seat.cards]
+                    }));
+                    next[seat].cards[cardIndex] = null;
+
+                    return next;
+                });
+                // const newHands = prev.map(h => ({
+                //     ...h,
+                //     cards: [...h.cards]
+                // }));
+
+                // newHands[seat].cards[sourceData.index] = null;
+
+                // return newHands;
+            }
+        };
+
+    }
     return { handleDragStart, handleDragEnd };
 }
 

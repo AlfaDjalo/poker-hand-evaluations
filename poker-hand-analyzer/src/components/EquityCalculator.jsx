@@ -101,7 +101,7 @@ const EquityCalculator = () => {
       setPlayers(prev => {
         const updated = { ...prev };
         const newHand = [...updated[identifier].hand];
-        newHand.splice(cardIndex, 1); // Remove card at index
+        newHand[cardIndex] = null;
         updated[identifier] = {
           ...updated[identifier],
           hand: newHand
