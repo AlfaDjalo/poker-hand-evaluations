@@ -13,11 +13,11 @@ def get_config():
 
     config = {
         # ---- General ----
-        "mode": "alternating",
-        # "mode": "absolute_value",
+        # "mode": "alternating",
+        "mode": "absolute_value",
         "load_encoder_model": True,
         "load_head_model": True,
-        "save_model": True,
+        "save_model": False,
 
         # ---- Database ----
         "db": db,
@@ -33,15 +33,15 @@ def get_config():
         "hand_embedding_dim": 32,
         "board_embedding_dim": 32,
         "combined_embedding_dim": 64,
-        "lr": 1e-4,
-        "lr_absolute_value": 1e-4,
-        "lr_pairwise": 1e-4,
+        "lr": 1e-5,
+        "lr_absolute_value": 1e-5,
+        "lr_pairwise": 1e-5,
         "loss_weights": [0.3, 0.3, 0.4],
         "activation": "sigmoid",
         "use_equivariance": False, #True,
 
         # ---- Training ----
-        "epochs": 20,
+        "epochs": 5,
         "steps_per_epoch": 500,
         # "callbacks": [],
         "mix_ratio": [0.45, 0.45, 0.1],

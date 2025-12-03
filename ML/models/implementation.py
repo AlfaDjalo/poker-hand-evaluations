@@ -104,7 +104,9 @@ class PokerCNNEncoder(Model):
         x = self.dense2(x)
         x = self.dropout(x, training=training)
         x = self.embedding(x)
+        print("🔑 pre-norm max:", tf.reduce_max(tf.abs(x)))
         x = self.l2_norm(x)
+        print("🔑 post-norm norm:", tf.norm(x))
         return x  # embedding vector
 
     def get_config(self):

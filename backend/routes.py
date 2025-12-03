@@ -66,40 +66,40 @@ def setup_api_routes(app):
     """
     
     # Load encoder model once at startup
-    encoder_model = None
-    encoder_path = None
+    # encoder_model = None
+    # encoder_path = None
     
-    def load_encoder():
-        nonlocal encoder_model, encoder_path
-        try:
-            # Import config to get encoder path
-            config = get_config()
-            # encoder_path = os.path.join(config["save_directory"], config["embedding_filename"])
-            encoder_path = os.path.join(config["save_directory"], config["encoder_filename"])
-            # encoder_path = os.path.join(config["embeddings_directory"], config["encoder_filename"])
+    # def load_encoder():
+    #     nonlocal encoder_model, encoder_path
+    #     try:
+    #         # Import config to get encoder path
+    #         config = get_config()
+    #         # encoder_path = os.path.join(config["save_directory"], config["embedding_filename"])
+    #         encoder_path = os.path.join(config["save_directory"], config["encoder_filename"])
+    #         # encoder_path = os.path.join(config["embeddings_directory"], config["encoder_filename"])
             
-            if os.path.exists(encoder_path):
-                # use trainer's helper for custom objects (was ML.models.implementation.get_custom_objects which doesn't exist)
-                encoder_model = tf.keras.models.load_model(
-                    encoder_path,
-                    custom_objects=get_custom_objects(),
-                    compile=False
-                )
-                print(f"✅ Encoder loaded from {encoder_path}; type={type(encoder_model)}")
-                # attempt to print summary if it's a keras Model
-                try:
-                    if hasattr(encoder_model, "summary"):
-                        print("Encoder model summary:")
-                        encoder_model.summary()
-                except Exception as e:
-                    print("Unable to print model summary:", e)
-            else:
-                print(f"⚠️ Encoder file not found at {encoder_path}")
-        except Exception as e:
-            print(f"⚠️ Failed to load encoder: {e}")
+    #         if os.path.exists(encoder_path):
+    #             # use trainer's helper for custom objects (was ML.models.implementation.get_custom_objects which doesn't exist)
+    #             encoder_model = tf.keras.models.load_model(
+    #                 encoder_path,
+    #                 custom_objects=get_custom_objects(),
+    #                 compile=False
+    #             )
+    #             print(f"✅ Encoder loaded from {encoder_path}; type={type(encoder_model)}")
+    #             # attempt to print summary if it's a keras Model
+    #             try:
+    #                 if hasattr(encoder_model, "summary"):
+    #                     print("Encoder model summary:")
+    #                     encoder_model.summary()
+    #             except Exception as e:
+    #                 print("Unable to print model summary:", e)
+    #         else:
+    #             print(f"⚠️ Encoder file not found at {encoder_path}")
+    #     except Exception as e:
+    #         print(f"⚠️ Failed to load encoder: {e}")
 
-    # Load encoder on first request
-    load_encoder()
+    # # Load encoder on first request
+    # load_encoder()
 
     @app.post("/evaluate")
     async def evaluate(req: HandRequest):
@@ -179,8 +179,107 @@ def setup_api_routes(app):
         except Exception as e:
             print(f"Error: {e}")
             return {"error": str(e)}
-        
+            
+
     @app.post("/embeddings")
+    async def embeddings(req: EmbeddingRequest):
+        """
+        Loads only the encoder required for the requested mode,
+        computes embeddings, and returns them.
+        """
+
+        try:
+            print("\n=== Embeddings Request ===")
+            print("Requested mode:", req.mode)
+            print("Hands:", req.embeddingHands)
+
+            # ------------------------
+            # 1. Validate mode
+            # ------------------------
+            mode = str(req.mode).lower().strip()
+            if mode not in ("2", "3", "5", "combined", "hand", "board"):
+                return {"error": f"Invalid mode: {req.mode}"}
+
+            # Normalise mode names
+            if mode == "2" or mode == "hand":
+                mode = "hand"
+            elif mode == "3" or mode == "board":
+                mode = "board"
+            else:
+                mode = "combined"
+
+            # ------------------------
+            # 2. Load config paths
+            # ------------------------
+            cfg = get_config()
+            model_paths = {
+                "hand": os.path.join(cfg["save_directory"], cfg["hand_encoder_filename"]),
+                "board": os.path.join(cfg["save_directory"], cfg["board_encoder_filename"]),
+                "combined": os.path.join(cfg["save_directory"], cfg["combined_encoder_filename"]),
+            }
+
+            encoder_path = model_paths[mode]
+            if not os.path.exists(encoder_path):
+                return {"error": f"Encoder file not found: {encoder_path}"}
+
+            print(f"Loading {mode} encoder from: {encoder_path}")
+
+            # ------------------------
+            # 3. Load only this encoder
+            # ------------------------
+            encoder = tf.keras.models.load_model(
+                encoder_path,
+                custom_objects=get_custom_objects(),
+                compile=False
+            )
+
+            # ------------------------
+            # 4. Convert hands to tensors
+            # ------------------------
+            embedding_hands = prepare_player_hands(req.embeddingHands)
+
+            tensors = []
+            for h in embedding_hands:
+                t = cards_to_tensor(h, mode)   # mode controls hand/board/combined input structure
+                tensors.append(t)
+
+            if not tensors:
+                return {"error": "No valid hands provided"}
+
+            batch = tf.stack(tensors)
+            print("Batch:", batch.shape)
+
+            # ------------------------
+            # 5. Run encoder
+            # ------------------------
+            try:
+                if hasattr(encoder, "predict"):
+                    out = encoder.predict(batch)
+                else:
+                    out = encoder(batch, training=False)
+            except Exception as e:
+                print("Encoder error:", e)
+                return {"error": f"Encoder run failed: {e}"}
+
+            # ------------------------
+            # 6. Normalize outputs
+            # ------------------------
+            try:
+                embeddings = out.numpy().tolist()
+            except Exception:
+                embeddings = out.tolist()
+
+            print(f"Generated {len(embeddings)} {mode} embeddings")
+
+            return {"embeddings": embeddings}
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return {"error": str(e)}
+
+
+    @app.post("/embeddings_old")
     async def embeddings(req: EmbeddingRequest):
         """Return the embeddings for the requested hands.
 
@@ -225,11 +324,21 @@ def setup_api_routes(app):
             print(f"Batch shape: {batch.shape}")
 
             # Call encoder: prefer .predict if present (covers Keras models loaded), otherwise try calling
+            if mode == "2": #"hand":
+                print("Embeddings for hand.")
+                selected_encoder = encoder_model.hand_encoder
+            elif mode == "3": #"board":
+                print("Embeddings for board.")
+                selected_encoder = encoder_model.board_encoder
+            else:  # Default or "combined"
+                print("Embeddings for combined.")
+                selected_encoder = encoder_model.combined_encoder
+
             try:
-                if hasattr(encoder_model, "predict"):
-                    out = encoder_model.predict(batch)
-                elif callable(encoder_model):
-                    out = encoder_model(batch, training=False)
+                if hasattr(selected_encoder, "predict"):
+                    out = selected_encoder.predict(batch)
+                elif callable(selected_encoder):
+                    out = selected_encoder(batch, training=False)
                 else:
                     return {"error": "Loaded encoder is not callable or does not expose predict()"}
             except Exception as e:
@@ -240,40 +349,46 @@ def setup_api_routes(app):
 
             # Normalize output: if encoder returned multiple tensors (hand, board, combined),
             # pick the combined embedding (last element). Otherwise use the single output.
-            if isinstance(out, (list, tuple)):
-                try:
-                    hand_embeddings = out[0].numpy().tolist()
-                    board_embeddings = out[1].numpy().tolist()
-                    combined_embeddings = out[2].numpy().tolist()
+            try:
+                embeddings_list = out.numpy().tolist()
+            except:
+                embeddings_list = out.tolist()
 
-                    print("hand_embeddings:", hand_embeddings)
-                    print("board_embeddings:", board_embeddings)
-                    print("combined_embeddings:", combined_embeddings)
 
-                except Exception:
-                    # Fallback if already numpy arrays
-                    hand_embeddings = out[0].tolist()
-                    board_embeddings = out[1].tolist()
-                    combined_embeddings = out[2].tolist()
-            else:
-                # Single output fallback: treat as combined embeddings
-                try:
-                    combined_embeddings = out.numpy().tolist()
-                except Exception:
-                    combined_embeddings = out.tolist()
+            # if isinstance(out, (list, tuple)):
+            #     try:
+            #         hand_embeddings = out[0].numpy().tolist()
+            #         board_embeddings = out[1].numpy().tolist()
+            #         combined_embeddings = out[2].numpy().tolist()
+
+            #         print("hand_embeddings:", hand_embeddings)
+            #         print("board_embeddings:", board_embeddings)
+            #         print("combined_embeddings:", combined_embeddings)
+
+            #     except Exception:
+            #         # Fallback if already numpy arrays
+            #         hand_embeddings = out[0].tolist()
+            #         board_embeddings = out[1].tolist()
+            #         combined_embeddings = out[2].tolist()
+            # else:
+            #     # Single output fallback: treat as combined embeddings
+            #     try:
+            #         combined_embeddings = out.numpy().tolist()
+            #     except Exception:
+            #         combined_embeddings = out.tolist()
 
             # Return embeddings according to requested mode
-            mode = req.mode.lower() if hasattr(req, "mode") else "combined"
+            # mode = req.mode.lower() if hasattr(req, "mode") else "combined"
 
-            if mode == "2": #"hand":
-                print("Embeddings for hand.")
-                embeddings_list = hand_embeddings
-            elif mode == "3": #"board":
-                print("Embeddings for board.")
-                embeddings_list = board_embeddings
-            else:  # Default or "combined"
-                print("Embeddings for combined.")
-                embeddings_list = combined_embeddings
+            # if mode == "2": #"hand":
+            #     print("Embeddings for hand.")
+            #     embeddings_list = hand_embeddings
+            # elif mode == "3": #"board":
+            #     print("Embeddings for board.")
+            #     embeddings_list = board_embeddings
+            # else:  # Default or "combined"
+            #     print("Embeddings for combined.")
+            #     embeddings_list = combined_embeddings
 
             print(f"Generated {len(embeddings_list)} embeddings for mode '{mode}'")
 
@@ -365,18 +480,87 @@ def setup_api_routes(app):
         suit_to_idx = {'s': 0, 'h': 1, 'd': 2, 'c': 3}
 
         # ----- Base empty grid -----
-        grid = np.zeros((13, 4, 2), dtype=np.float32)
+        grid = np.zeros((13, 4, 1), dtype=np.float32)
 
         # ----- Split cards based on mode -----
-        if mode == "2": #"hand":
+        if mode == "hand":
             hand_cards = cards
             board_cards = []
 
-        elif mode == "3": #"board":
+        elif mode == "board":
             hand_cards = []
             board_cards = cards
 
-        elif mode == "5": #"combined":
+        elif mode == "combined":
+            hand_cards = cards[:2]
+            board_cards = cards[2:5]
+
+        else:
+            raise ValueError(f"Unknown mode '{mode}'. Expected: hand, board, combined.")
+
+        # ----- Fill hand channel (0) -----
+        for card in hand_cards:
+            if len(card) < 2:
+                continue
+            rank = card[0].upper()
+            suit = card[-1].lower()
+            if rank in rank_to_idx and suit in suit_to_idx:
+                grid[rank_to_idx[rank], suit_to_idx[suit], 0] = 1.0
+
+        # ----- Fill board channel (1) -----
+        for card in board_cards:
+            if len(card) < 2:
+                continue
+            rank = card[0].upper()
+            suit = card[-1].lower()
+            if rank in rank_to_idx and suit in suit_to_idx:
+                grid[rank_to_idx[rank], suit_to_idx[suit], 0] = 1.0
+
+        return tf.constant(grid, dtype=tf.float32)
+
+
+    def cards_to_tensor_old(cards: List[str], mode: str) -> tf.Tensor:
+        """
+        Convert cards to a (13, 4, 2) tensor.
+
+        Channels:
+            0 = hand cards
+            1 = board cards
+
+        Modes:
+            - "hand":     all cards go to hand channel
+            - "board":    all cards go to board channel
+            - "combined": cards[0:2] -> hand channel, cards[2:5] -> board channel
+
+        Args:
+            cards: List[str]   e.g. ["As", "Kd"] or ["As", "Kd", "7h", "2d", "Tc"]
+            mode: str          "hand", "board", "combined"
+
+        Returns:
+            tf.Tensor of shape (13, 4, 2)
+        """
+
+        # ----- Rank & suit lookup -----
+        rank_to_idx = {
+            'A': 0, 'K': 1, 'Q': 2, 'J': 3, 'T': 4,
+            '9': 5, '8': 6, '7': 7, '6': 8, '5': 9,
+            '4': 10, '3': 11, '2': 12
+        }
+        suit_to_idx = {'s': 0, 'h': 1, 'd': 2, 'c': 3}
+
+        # ----- Base empty grid -----
+        grid = np.zeros((13, 4, 2), dtype=np.float32)
+
+        # ----- Split cards based on mode -----
+        if mode == "hand":
+            hand_cards = cards
+            board_cards = []
+
+        elif mode == "board":
+            hand_cards = []
+            board_cards = cards
+
+        elif mode == "combined":
             hand_cards = cards[:2]
             board_cards = cards[2:5]
 
