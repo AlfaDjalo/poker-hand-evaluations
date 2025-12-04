@@ -17,7 +17,7 @@ def get_config():
         "mode": "absolute_value",
         "load_encoder_model": True,
         "load_head_model": True,
-        "save_model": False,
+        "save_model": True,
 
         # ---- Database ----
         "db": db,
@@ -25,6 +25,7 @@ def get_config():
         "model_batch_size": 64, #1024,
 
         # ---- Model ----
+        "use_shared_encoder": True,
         "input_shape": (13, 4, 2),
         "input_shape_encoder": (13, 4, 1),
         "filters": (8, 16, 32),
@@ -41,7 +42,7 @@ def get_config():
         "use_equivariance": False, #True,
 
         # ---- Training ----
-        "epochs": 5,
+        "epochs": 20,
         "steps_per_epoch": 500,
         # "callbacks": [],
         "mix_ratio": [0.45, 0.45, 0.1],
@@ -65,16 +66,15 @@ def get_config():
         },
 
         # ---- Paths ----
-        "save_directory": os.path.join(base_dir, "models", "saved"),
-        "embeddings_directory": os.path.join(base_dir, "ML", "models", "embeddings"),
-        "hand_encoder_filename": "hand_encoder_model.keras",
-        "board_encoder_filename": "board_encoder_model.keras",
-        "combined_encoder_filename": "combined_encoder_model.keras",
-        "encoder_filename": "encoder_model.keras",
-        # "embedding_filename": "embedding_model.keras",
-        "absolute_model_filename": "poker_value_model.keras",
-        "pairwise_model_filename": "poker_pairwise_model.keras",
-        "log_dir": os.path.join(base_dir, "logs")
+        "save_directory":               os.path.join(base_dir, "models", "saved"),
+        "embeddings_directory":         os.path.join(base_dir, "ML", "models", "embeddings"),
+        "hand_encoder_filename":        "hand_encoder_model.keras",
+        "board_encoder_filename":       "board_encoder_model.keras",
+        "combined_encoder_filename":    "combined_encoder_model.keras",
+        "shared_encoder_filename":      "shared_encoder_model.keras",
+        "absolute_model_filename":      "poker_value_model.keras",
+        "pairwise_model_filename":      "poker_pairwise_model.keras",
+        "log_dir":                      os.path.join(base_dir, "logs")
     }
 
     return config

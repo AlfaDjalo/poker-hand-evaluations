@@ -36,11 +36,15 @@
     background-color: #1A7FE0;
 }
 
-.ve-button:active {
+.ve-button.active {
     transform: scale(0.97);
+    background-color: #4c8bf5;
+    color: white;
+    border-color: #4c8bf5;
 }
 
 .ve-button-secondary {
+
     padding: 4px 10px;
     border: 1px solid #AAA;
     background-color: #333;
@@ -66,4 +70,8 @@
     font-size: 1.8rem;
     font-weight: 600;
     text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.combined-chart-wrapper {
+  min-height: 400px;
 }

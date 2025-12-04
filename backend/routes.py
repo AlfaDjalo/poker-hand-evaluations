@@ -216,9 +216,14 @@ def setup_api_routes(app):
                 "hand": os.path.join(cfg["save_directory"], cfg["hand_encoder_filename"]),
                 "board": os.path.join(cfg["save_directory"], cfg["board_encoder_filename"]),
                 "combined": os.path.join(cfg["save_directory"], cfg["combined_encoder_filename"]),
+                "shared": os.path.join(cfg["save_directory"], cfg["shared_encoder_filename"]),
             }
 
-            encoder_path = model_paths[mode]
+            if cfg["use_shared_encoder"]:
+                encoder_path = model_paths["shared"]
+            else:
+                encoder_path = model_paths[mode]
+            
             if not os.path.exists(encoder_path):
                 return {"error": f"Encoder file not found: {encoder_path}"}
 

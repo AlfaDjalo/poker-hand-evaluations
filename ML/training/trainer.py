@@ -33,19 +33,6 @@ def load_value_model(path):
         safe_mode=False
     )
 
-# def load_pairwise_model(path):
-#     return tf.keras.models.load_model(
-#         path,
-#         custom_objects={
-#             'PokerComboModel': PokerComboModel,
-#             "PokerValueModel": PokerValueModel,
-#             'PokerValueHeads': PokerValueHeads,
-#             'PokerCNNEncoder': PokerCNNEncoder,
-#             'SuitEquivariantLayer': SuitEquivariantLayer,
-#             'PairwiseModel': PairwiseModel
-#             },
-#         safe_mode=False
-#     )
 
 def get_custom_objects():
     """Return all custom classes used in Poker models for loading Keras files."""
@@ -74,10 +61,12 @@ def train_embeddings(config=None):
 
     # --- Paths ---
     save_dir = config["save_directory"]
+    
     hand_encoder_path = os.path.join(save_dir, config["hand_encoder_filename"])
     board_encoder_path = os.path.join(save_dir, config["board_encoder_filename"])
     combined_encoder_path = os.path.join(save_dir, config["combined_encoder_filename"])
-    encoder_path = os.path.join(save_dir, config["encoder_filename"])
+    shared_encoder_path = os.path.join(save_dir, config["shared_encoder_filename"])
+    
     abs_model_path = os.path.join(save_dir, config["absolute_model_filename"])
     pairwise_model_path = os.path.join(save_dir, config["pairwise_model_filename"])
 
@@ -100,7 +89,7 @@ def train_embeddings(config=None):
             model = build_pairwise_model(config) 
 
     if config["load_encoder_model"]:
-        load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path)
+        load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path, shared_encoder_path)
         # load_encoder(model, encoder_path)
 
     # --- Compile ---
@@ -194,86 +183,6 @@ def train_embeddings(config=None):
 
     else:
         print("No encoder.")
-    # # ============================
-    # # DEBUG BLOCK: BATCH + FORWARD
-    # # ============================
-
-    # print("\n=== DEBUG: Checking one batch ===")
-
-    # batch = next(iter(train_gen))
-    # inputs, y = batch
-
-    # # Show shapes
-    # print("Inputs:")
-    # if isinstance(inputs, dict):
-    #     # New format (dict with 6 entries)
-    #     for k, v in inputs.items():
-    #         print(f"  {k}: {v.shape}")    
-    # elif isinstance(inputs, (tuple, list)) and len(inputs) == 2:
-    #     # Old format: (x1, x2), where each is a tuple of 3 tensors
-    #     x1, x2 = inputs
-    #     print("  x1:")
-    #     for t in x1:
-    #         print("    ", t.shape)
-    #     print("  x2:")
-    #     for t in x2:
-    #         print("    ", t.shape)
-
-    # else:
-    #     print("  Unknown input structure:", type(inputs))
-
-    # print("Y shapes:",
-    #     [t.shape for t in y] if isinstance(y, (tuple, list)) else y.shape)
-
-    # # Try a forward call (critical!)
-    # print("\n=== DEBUG: Forward pass through model ===")
-    # try:
-    #     out = model(inputs, training=False)
-    #     if isinstance(out, (tuple, list)):
-    #         print("Forward outputs:", [o.shape for o in out])
-    #     else:
-    #         print("Forward output:", out.shape)
-    # except Exception as e:
-    #     print("❌ Forward pass failed:", e)
-
-    # # Check if weights change for one training step
-    # print("\n=== DEBUG: Training step check ===")
-    # before = [w.numpy().copy() for w in model.weights]
-
-    # try:
-    #     model.train_on_batch(inputs, y)
-
-    #     # Check if weights change for one training step
-    #     print("\n=== DEBUG: Training step check ===")
-        
-    #     # Save weights before
-    #     encoder_weights_before = [w.numpy().copy() for w in enc.trainable_weights]
-    #     value_head_weights_before = [w.numpy().copy() for w in model.layers[-1].trainable_weights]  # last layer
-        
-    #     loss = model.train_on_batch((x1, x2), y)
-        
-    #     # Save weights after
-    #     encoder_weights_after = model.get_weights()[:len(enc.trainable_weights)]
-    #     value_head_weights_after = model.get_weights()[-len(model.layers[-1].trainable_weights):]
-        
-    #     encoder_changed = any((encoder_weights_before[i] != encoder_weights_after[i]).any() for i in range(len(encoder_weights_before)))
-    #     value_changed = any((value_head_weights_before[i] != value_head_weights_after[i]).any() for i in range(len(value_head_weights_before)))
-        
-    #     print(f"Encoder weights changed: {encoder_changed}")
-    #     print(f"Value head weights changed: {value_changed}")
-    #     print(f"Loss: {loss}")
-
-
-
-    #     after = model.get_weights()
-
-    #     changed = any((before[i] != after[i]).any() for i in range(len(before)))
-    #     print("Any weight changed?:", changed)
-
-    # except Exception as e:
-    #     print("❌ train_on_batch failed:", e)
-
-    # print("=== END DEBUG ===\n")
 
     # --- Create validation generator ---
     val_config = dict(config)
@@ -340,7 +249,7 @@ def train_embeddings(config=None):
         else:
             print(f"💾 Saving pairwise model to {pairwise_model_path}")
             model.save(pairwise_model_path)
-        save_all_encoders(model, hand_encoder_path, board_encoder_path, combined_encoder_path)
+        save_all_encoders(model, hand_encoder_path, board_encoder_path, combined_encoder_path, shared_encoder_path)
         # save_encoder(model, encoder_path)
     
     return model
@@ -365,19 +274,6 @@ def find_encoder(model):
                 return found
     return None
 
-# def save_encoder_weights(model, path):
-#     """Extracts encoder from model and saves its weights."""
-#     encoder = model.get_layer("poker_combo_model")
-#     encoder.save_weights(path)
-
-# def load_encoder_weights(model, path):
-#     """Loads encoder weights into model if available."""
-#     encoder = model.get_layer("poker_combo_model")
-#     if os.path.exists(path):
-#         print(f"🔄 Loading encoder weights from {path}")
-#         encoder.load_weights(path)
-#     else:
-#         print(f"⚠️ Encoder weights not found at {path}")
 
 
 def save_encoder(model, path):
@@ -393,36 +289,55 @@ def save_encoder(model, path):
     else:
         print("⚠️ No encoder found to save.")
 
-def save_all_encoders(model, hand_encoder_path, board_encoder_path, combined_encoder_path):
+def save_all_encoders(model, hand_encoder_path, board_encoder_path, combined_encoder_path, shared_encoder_path):
     encoder = find_encoder(model)  # Get PokerComboModel
     if not encoder:
         print("⚠️ No encoder found to save")
         return
 
-    # Save each encoder separately
-    encoder.hand_encoder.save(hand_encoder_path)
-    encoder.board_encoder.save(board_encoder_path)
-    encoder.combined_encoder.save(combined_encoder_path)
+    if encoder.use_shared_encoder:
+        # Save shared encoder to a separate path
+        print(f"💾 Saving SHARED encoder to {shared_encoder_path}")
+        encoder.shared_encoder.save(shared_encoder_path)        
+    else:
+        # Save each encoder separately
+        encoder.hand_encoder.save(hand_encoder_path)
+        encoder.board_encoder.save(board_encoder_path)
+        encoder.combined_encoder.save(combined_encoder_path)
+        print("💾 Saved hand, board and combined encoders.")
 
-    print("Saved hand, board and combined encoders.")
 
-def load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path):
-    hand = tf.keras.models.load_model(hand_encoder_path, compile=False)
-    board = tf.keras.models.load_model(board_encoder_path, compile=False)
-    combined = tf.keras.models.load_model(combined_encoder_path, compile=False)
-
+def load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path, shared_encoder_path):
     encoder = find_encoder(model)
     if not encoder:
         print("⚠️ No encoder found in model")
         return       
 
-    encoder.hand_encoder.set_weights(hand.get_weights())
-    encoder.board_encoder.set_weights(board.get_weights())
-    encoder.combined_encoder.set_weights(combined.get_weights())
+    if encoder.use_shared_encoder:
+        # Try to load from shared_encoder path first, fallback to hand_encoder
+        shared_encoder_path = hand_encoder_path.replace("hand_encoder", "shared_encoder")
+        
+        if os.path.exists(shared_encoder_path):
+            print(f"🔄 Loading SHARED encoder from {shared_encoder_path}")
+            shared = tf.keras.models.load_model(shared_encoder_path, compile=False, custom_objects=get_custom_objects())
+        else:
+            print(f"🔄 Shared encoder not found, loading from {hand_encoder_path}")
+            shared = tf.keras.models.load_model(hand_encoder_path, compile=False, custom_objects=get_custom_objects())
+        
+        encoder.shared_encoder.set_weights(shared.get_weights())
+        print("✅ Loaded shared encoder weights into all three encoders")
+    else:
+        print("🔄 Loading SEPARATE encoders")
+        hand = tf.keras.models.load_model(hand_encoder_path, compile=False)
+        board = tf.keras.models.load_model(board_encoder_path, compile=False)
+        combined = tf.keras.models.load_model(combined_encoder_path, compile=False)
 
-    print("✅ Loaded hand, board, and combined encoder weights into model")
-    
-    # return encoder
+        encoder.hand_encoder.set_weights(hand.get_weights())
+        encoder.board_encoder.set_weights(board.get_weights())
+        encoder.combined_encoder.set_weights(combined.get_weights())
+
+        print("✅ Loaded hand, board, and combined encoder weights into model")
+
 
 def load_encoder(model, encoder_path):
     """Load encoder weights into model if encoder exists and file found."""

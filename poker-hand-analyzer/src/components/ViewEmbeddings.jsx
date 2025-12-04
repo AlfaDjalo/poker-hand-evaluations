@@ -3,6 +3,7 @@ import React, {useState, useEffect } from "react";
 import CardSelector from './CardSelector';
 import Hand from './Hand';
 import EmbeddingChart from './EmbeddingChart';
+import CombinedEmbeddingChart from './CombinedEmbeddingChart';
 import "../css/ViewEmbeddings.css";
 import { loadEmbeddings } from "../utils/api";
 import { usePokerDnD } from "../hooks/usePokerDnD"
@@ -20,24 +21,13 @@ const ViewEmbeddings = () => {
                 { card: "6S", hidden: false }
             ],
             embedding: null
-        },
-        {
-            cards: [null, null, null, null, null],
-            embedding: null
         }
     ]);
-    // const [embeddingHands, setEmbeddingHands] = useState([
-    //     [
-    //         { card: "AS", hidden: false },
-    //         { card: "JD", hidden: false },
-    //         { card: "8D", hidden: false },
-    //         { card: "6C", hidden: false },
-    //         { card: "4S", hidden: false }
-    //     ],
-    //     [null, null, null, null, null],
-    // ]);
+
     const [calculating, setCalculating] = useState(false);
     const [embeddingMode, setEmbeddingMode] = useState("5");
+    const [viewMode, setViewMode] = useState("individual");   // "individual" | "combined"
+    
     const sensors = useSensors(
         useSensor(PointerSensor, {
         activationConstraint: { distance: 100 },
@@ -176,86 +166,117 @@ const ViewEmbeddings = () => {
             // onDragEnd={event => {
             //     console.log("Drag event ended.", event);
             // }}
-            >
-                <div className="view-embeddings">
-                    <h2>View Embeddings</h2>
+        >
+            <div className="view-embeddings">
+                <h2>View Embeddings</h2>
 
-                    <CardSelector
-                        onSelectCard={handleCardSelected}
-                        usedCards = {usedCards}
-                    />
+                <CardSelector
+                    onSelectCard={handleCardSelected}
+                    usedCards = {usedCards}
+                />
 
-                    <div className="mb-4">
-                        <select
-                            value={embeddingMode}
-                            onChange={e => setEmbeddingMode(e.target.value)}
-                            className="ve-select mr-4"
-                        >
-                            <option value="2">Hole Cards (2)</option>
-                            <option value="3">Board (3)</option>
-                            <option value="5">Combined (5)</option>
-                        </select>
-                    </div>
-
-                    <div className="mb-4">
-                        <button
-                            onClick={handleAddHand}
-                            className="ve-button mr-2"
-                        >
-                            + Add hand
-                        </button>
-                        <span className="text-sm text-gray-600">Dummy hands shown below</span>
-                    </div>
-
-                    <div className="mb-4">
-                        <button
-                            onClick={handleLoadEmbeddings}
-                            className="ve-button mr-2"
-                        >
-                            Load Embeddings
-                        </button>
-                        <span className="text-sm text-gray-600">Dummy hands shown below</span>
-                    </div>
-
-                    <div className="embedding-hands-container">
-                        {embeddingHands.map((handObj, i) => (
-                            <div key={i} className="embedding-hand-block flex flex-col items-center">
-                                <div className="mb-2">
-                                    <Hand 
-                                        seatNumber={i}
-                                        cards={handObj.cards}
-                                        scale={1}
-                                        showSlots={true}
-                                        activeSlot={null}
-                                        onCardClick={(cardIndex) => handleCardClick(i, cardIndex)}
-                                        onSlotClick={(slotIndex) => handleSlotClick(i, slotIndex)}
-                                        maxCards={Number(embeddingMode)}
-                                        />
-                                </div>
-                                
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => handleDuplicateHand(i)}
-                                        className="ve-button-secondary"
-                                    >
-                                        Duplicate
-                                    </button>
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => handleRemoveHand(i)}
-                                        className="ve-button-secondary"
-                                    >
-                                        Remove
-                                    </button>
-                                </div>
-
-                                <EmbeddingChart embedding={handObj.embedding} />
-                            </div>
-                        ))}
-                    </div>
+                <div className="mb-4">
+                    <select
+                        value={embeddingMode}
+                        onChange={e => setEmbeddingMode(e.target.value)}
+                        className="ve-select mr-4"
+                    >
+                        <option value="2">Hole Cards (2)</option>
+                        <option value="3">Board (3)</option>
+                        <option value="5">Combined (5)</option>
+                    </select>
                 </div>
+
+                <div className="mb-4">
+                    <button
+                        onClick={handleAddHand}
+                        className="ve-button mr-2"
+                    >
+                        + Add hand
+                    </button>
+                    <span className="text-sm text-gray-600">Dummy hands shown below</span>
+                </div>
+
+                <div className="mb-4">
+                    <button
+                        onClick={handleLoadEmbeddings}
+                        className="ve-button mr-2"
+                    >
+                        Load Embeddings
+                    </button>
+                    <span className="text-sm text-gray-600">Dummy hands shown below</span>
+                </div>
+
+                <div className="mb-4">
+                    <button
+                        onClick={() => setViewMode("individual")}
+                        className={`ve-button mr-2 ${viewMode === "individual" ? "active" : ""}`}
+                    >
+                        Individual charts
+                    </button>
+
+                    <button
+                        onClick={() => setViewMode("combined")}
+                        className={`ve-button ${viewMode === "combined" ? "active" : ""}`}
+                    >
+                        Combined chart
+                    </button>
+
+                    <span className="text-sm text-gray-600 ml-3">
+                        Switch how embeddings are visualised
+                    </span>
+                </div>
+
+                <div className="embedding-hands-container">
+                    {embeddingHands.map((handObj, i) => (
+                        <div key={i} className="embedding-hand-block flex flex-col items-center">
+                            <div className="mb-2">
+                                <Hand 
+                                    seatNumber={i}
+                                    cards={handObj.cards}
+                                    scale={1}
+                                    showSlots={true}
+                                    activeSlot={null}
+                                    onCardClick={(cardIndex) => handleCardClick(i, cardIndex)}
+                                    onSlotClick={(slotIndex) => handleSlotClick(i, slotIndex)}
+                                    maxCards={Number(embeddingMode)}
+                                    />
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleDuplicateHand(i)}
+                                    className="ve-button-secondary"
+                                >
+                                    Duplicate
+                                </button>
+                            </div>
+
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleRemoveHand(i)}
+                                    className="ve-button-secondary"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+
+                            {viewMode === "individual"
+                            ? <EmbeddingChart embedding={handObj.embedding} />
+                            : null}
+
+
+                            {/* <EmbeddingChart embedding={handObj.embedding} /> */}
+                        </div>
+                    ))}
+                </div>
+            </div>
+            {viewMode === "combined" && (
+                <div className="combined-chart-wrapper mt-8 w-full">
+                    <h3 className="text-lg font-semibold mb-2">Combined Embeddings</h3>
+                    <CombinedEmbeddingChart hands={embeddingHands} />
+                </div>
+            )}
         </DndContext>
     );
 };
