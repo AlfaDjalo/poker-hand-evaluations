@@ -54,7 +54,12 @@ const CombinedEmbeddingChart = ({ hands }) => {
     return (
         <div style={{ width: "100%", height: 400 }}>
             <ResponsiveContainer>
-                <BarChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                <BarChart 
+                    data={data}
+                    margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
+                    barCategoryGap="20%"
+                    barGap={2}              
+                >
                     <XAxis
                         dataKey="dim"
                         type="category"

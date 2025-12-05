@@ -77,6 +77,55 @@ def evaluate_model(model, data, model_type='absolute', num_examples=20):
         return
 
     # -----------------------------
+    # HAND CATEGORY MODEL (3 heads, categorical)
+    # -----------------------------
+    elif model_type == 'hand_category':
+
+        # categorical crossentropy over all outputs
+        cce = tf.keras.losses.CategoricalCrossentropy()
+        total_loss = np.mean([ cce(y_eval[i], y_pred[i]).numpy().item() for i in range(3) ])
+
+        # accuracy: compare argmax between one-hot targets and softmax outputs
+        def argmax_arr(x):
+            arr = np.array(x)
+            if arr.ndim == 3 and arr.shape[-1] == 1:
+                arr = arr.squeeze(-1)
+            return np.argmax(arr, axis=-1)
+
+        acc = np.mean([
+            np.mean(argmax_arr(y_pred[i]) == argmax_arr(y_eval[i]))
+            for i in range(3)
+        ])
+
+        print("\n📊 Hand Category Evaluation Results:")
+        print(f"  Categorical CE Loss (avg heads): {total_loss:.6f}")
+        print(f"  Accuracy (all heads): {acc:.4f}")
+
+        # Category-only metrics (combo/head index 2)
+        loss_cat = cce(y_eval[2], y_pred[2]).numpy().item()
+        acc_cat = np.mean(argmax_arr(y_pred[2]) == argmax_arr(y_eval[2]))
+
+        print(f"\n  Categorical CE Loss (category head): {loss_cat:.6f}")
+        print(f"  Accuracy (category head): {acc_cat:.4f}")
+
+        print("\n🔎 Example predictions (all 3 heads):")
+        n = min(num_examples, len(y_pred[0]))
+
+        for i in range(n):
+            p0 = np.argmax(y_pred[0][i]); a0 = np.argmax(y_eval[0][i])
+            p1 = np.argmax(y_pred[1][i]); a1 = np.argmax(y_eval[1][i])
+            p2 = np.argmax(y_pred[2][i]); a2 = np.argmax(y_eval[2][i])
+
+            print(f"{i+1:02d}: h0={p0}/{a0}   h1={p1}/{a1}   h2={p2}/{a2}")
+
+        print("\n🔎 Example predictions (category head only):")
+        for i in range(n):
+            p = np.argmax(y_pred[2][i]); a = np.argmax(y_eval[2][i])
+            print(f"{i+1:02d}: Pred={p}  |  Actual={a}")
+
+        return
+
+    # -----------------------------
     # VALUE MODEL (regression)
     # -----------------------------
     else:

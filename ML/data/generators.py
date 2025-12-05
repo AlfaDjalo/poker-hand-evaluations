@@ -20,6 +20,11 @@ def create_tensor_grids(mode, rows):
             y is (len(rows)) tensor of floats [0, 1] for the output labels
     """
 
+    def duplicate_ace_rank(grid):
+        # grid: (13,4) -> (14,4)
+        ace_row = grid[0:1]      # Rank 'A' at index 0
+        return np.concatenate([ace_row, grid], axis=0)
+
     def create_grids(hand_mask, board_mask):
         """
         Helper function to create hand and board grids.
@@ -44,12 +49,16 @@ def create_tensor_grids(mode, rows):
                 board_grid[rank][suit] = 1
                 # full_grid[rank][suit] = 1
 
+        # ✅ NEW: duplicate the Ace row
+        hand_grid  = duplicate_ace_rank(hand_grid)
+        board_grid = duplicate_ace_rank(board_grid)
+        
         combined = np.stack([hand_grid, board_grid], axis=-1)
 
         return combined
     
 
-    if mode == "absolute_value":
+    if mode in ["absolute_value", "hand_category"]:
         inputs = []
     else:
         inputs_A = []
@@ -58,7 +67,7 @@ def create_tensor_grids(mode, rows):
     labels = []
 
     for row in rows:
-        if mode == "absolute_value":
+        if mode in ["absolute_value", "hand_category"]:
             (hand_mask, board_mask, high_value, low_value) = row
             combined = create_grids(hand_mask, board_mask)
             inputs.append(combined)
@@ -76,7 +85,7 @@ def create_tensor_grids(mode, rows):
             else:
                 labels.append(1.0 if high_value_A < high_value_B else 0.0)
 
-    if mode == "absolute_value":
+    if mode in ["absolute_value", "hand_category"]:
         x = tf.convert_to_tensor(np.stack(inputs))
     else:
         x = (
@@ -169,7 +178,8 @@ def augment_batch_with_suit_permutations(batch_inputs):
     permuted_batches = tf.transpose(permuted_batches, perm=[1, 0, 2, 3, 4])
     
     # Merge batch and perm dimensions: (batch_size * 24, 13, 4, channels)
-    permuted_batches = tf.reshape(permuted_batches, (batch_size * 24, 13, 4, batch_inputs.shape[-1]))
+    permuted_batches = tf.reshape(permuted_batches, (batch_size * 24, 14, 4, batch_inputs.shape[-1]))
+    # permuted_batches = tf.reshape(permuted_batches, (batch_size * 24, 13, 4, batch_inputs.shape[-1]))
 
     return permuted_batches
 
@@ -297,6 +307,111 @@ class AbsoluteGenerator(BaseGenerator):
         # Cache the numpy arrays for slicing in __getitem__
         self._preloaded_x = x_tensor.numpy()
         self._preloaded_y = y_tensor.numpy()
+
+
+
+# ==========================================================
+# Category generator (supervised classification)
+# ==========================================================
+class CategoryGenerator(AbsoluteGenerator):
+    """
+    Same as AbsoluteGenerator, but converts treys rank values
+    into a categorical class {0..8}.
+    """
+
+    @staticmethod
+    def rank_to_category(rank):
+        if 1 <= rank <= 10:
+            return 0
+        if 11 <= rank <= 166:
+            return 1
+        if 167 <= rank <= 322:
+            return 2
+        if 323 <= rank <= 1599:
+            return 3
+        if 1600 <= rank <= 1609:
+            return 4
+        if 1610 <= rank <= 2467:
+            return 5
+        if 2468 <= rank <= 3325:
+            return 6
+        if 3326 <= rank <= 6185:
+            return 7
+        return 8
+
+    def _load_new_batch(self):
+        """
+        Loads the rank values from DB but converts them into
+        categorical classes instead of regression targets.
+        """
+        sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
+
+        # Reuse your existing tensor builder
+        x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
+
+        # rank_tensor is shape (N, 1) normalized 0..1
+        # convert back to treys rank (1..7461)
+        rank_np = rank_tensor.numpy().reshape(-1)
+        treys_rank = (rank_np * 7461).astype(int) + 1
+
+        # Convert to category 0..8
+        class_idx = np.array([self.rank_to_category(r) for r in treys_rank], dtype=np.int32)
+
+        # Convert to one-hot (N, 9)
+        category_onehot = tf.one_hot(class_idx, depth=9, dtype=tf.float32).numpy()
+
+        # Return x and ONE-HOT y
+        return x_tensor.numpy(), category_onehot
+
+        # # rank_tensor is shape (N, 1) or (N,)
+        # rank_np = rank_tensor.numpy().reshape(-1)
+
+        # # Convert to category class (vectorized)
+        # category_np = np.array([self.rank_to_category(r) for r in rank_np], dtype=np.int32)
+
+        # # Model expects 3 identical heads
+        # return x_tensor.numpy(), category_np
+
+    def __getitem__(self, idx):
+        if self.is_validation and self._preloaded_x is not None:
+            start = (idx * self.batch_size) % len(self._preloaded_x)
+            end = start + self.batch_size
+
+            y_batch = self._preloaded_y[start:end]
+            return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
+
+        if not hasattr(self, 'x'):
+            self.x, self.y = self._load_new_batch()
+
+        start = (idx * self.batch_size) % len(self.x)
+        end = start + self.batch_size
+
+        batch_x = self.x[start:end]
+        batch_y = self.y[start:end]
+
+        # Suit augmentation
+        batch_x_aug = augment_batch_with_suit_permutations(batch_x)
+        batch_y_aug = np.repeat(batch_y, 24, axis=0)
+
+        return batch_x_aug, (batch_y_aug, batch_y_aug, batch_y_aug)
+
+    def preload_validation_data(self):
+        """
+        Load validation batch and convert rank values → one-hot categories.
+        """
+        sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
+        x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
+
+        rank_np = rank_tensor.numpy().reshape(-1)
+        # Convert normalized rank back to treys rank (1..7461)
+        treys_rank = (rank_np * 7461).astype(int) + 1
+        # Convert to category class (0..8)
+        class_idx = np.array([self.rank_to_category(r) for r in treys_rank], dtype=np.int32)
+        # Convert to one-hot (N, 9)
+        category_onehot = tf.one_hot(class_idx, depth=9, dtype=tf.float32).numpy()
+
+        self._preloaded_x = x_tensor.numpy()
+        self._preloaded_y = category_onehot
 
 
 # ==========================================================

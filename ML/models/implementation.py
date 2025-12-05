@@ -8,6 +8,94 @@ from typing import Optional
 
 @register_keras_serializable(package="Poker")
 class PokerCNNEncoder(Model):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.input_shape_encoder = config["input_shape_encoder"]  # ideally (14,4,C)
+        self.embedding_dim = config["embedding_dim"]
+
+        # First layer: full suit mixing + local rank mixing
+        self.conv2d = layers.Conv2D(
+            filters=32,
+            kernel_size=(2,4),
+            padding="valid",
+            activation="relu"
+        )
+        self.bn2d = layers.BatchNormalization()
+        
+        # After conv2d, reshape to (batch, ranks-1, filters)
+        self.reshape = layers.Reshape((13, 32))
+        # self.reshape = layers.Reshape((-1, 32))
+        
+        # Rank-progressive 1D layers
+        self.conv1 = layers.Conv1D(48, kernel_size=2, padding="valid", activation="relu")
+        self.bn1 = layers.BatchNormalization()
+
+        self.conv2 = layers.Conv1D(64, kernel_size=2, padding="valid", activation="relu")
+        self.bn2 = layers.BatchNormalization()
+
+        self.conv3 = layers.Conv1D(96, kernel_size=2, padding="valid", activation="relu")
+        self.bn3 = layers.BatchNormalization()
+
+        # Dense projection to embedding
+        self.flatten = layers.Flatten()
+        self.d1 = layers.Dense(256, activation="relu")
+        self.d2 = layers.Dense(64, activation="relu")
+        self.embedding = layers.Dense(self.embedding_dim, activation=None)
+
+        # L2 normalisation
+        self.l2_norm = layers.Lambda(lambda t: tf.nn.l2_normalize(t, axis=-1))
+
+    def call(self, x, training=False):
+
+        x = self.conv2d(x)
+        x = self.bn2d(x, training=training)
+
+        x = self.reshape(x)
+
+        x = self.conv1(x)
+        x = self.bn1(x, training=training)
+
+        x = self.conv2(x)
+        x = self.bn2(x, training=training)
+
+        x = self.conv3(x)
+        x = self.bn3(x, training=training)
+
+        x = self.flatten(x)
+        x = self.d1(x)
+        x = self.d2(x)
+
+        x = self.embedding(x)
+        x = self.l2_norm(x)
+
+        return x
+
+    def get_config(self):
+        base = super().get_config()
+        base.update({
+            "config": {
+                "input_shape_encoder": self.input_shape_encoder,
+                # "filters": self.filters,
+                # "kernel_size": self.kernel_size,
+                "embedding_dim": self.embedding_dim,
+                # "use_equivariance": self.use_equivariance,
+            }
+        })
+        return base
+
+    @classmethod
+    def from_config(cls, config):
+        if "config" in config:
+            cfg = config.pop("config")
+        else:
+            cfg = config
+        return cls(cfg, **config)
+
+
+
+@register_keras_serializable(package="Poker")
+class PokerCNNEncoder_old(Model):
     """
     Model to convert input grid into embedding vector.
     
@@ -161,9 +249,9 @@ class PokerValueModel(Model):
         return cls(encoder=None, activation=cfg.get("activation", "sigmoid"), **config)
 
     @property
-    def encoder_input_shape(self):
+    def encoder_input_shape(self, config):
         # Match the encoder’s expected shape from config
-        return (13, 4, 2)
+        return config["input_shape_encoder"] #(13, 4, 2)
 
 @register_keras_serializable(package="Poker")
 class PokerValueHeads(tf.keras.Model):
@@ -188,6 +276,90 @@ class PokerValueHeads(tf.keras.Model):
         hand_v = self.hand_value(hand, training=training)
         board_v = self.board_value(board, training=training)
         combined_v = self.combined_value(combo, training=training)
+
+        if return_all:
+            return hand_v, board_v, combined_v
+        
+        return combined_v
+
+    def get_config(self):
+        base = super().get_config()
+        base.update({
+            "activation": self.activation,
+            "encoders_config": self.encoders.get_config(),
+        })
+        return base
+
+    @classmethod
+    def from_config(cls, config):
+        activation = config.pop("activation", "sigmoid")
+        enc_cfg = config.pop("encoders_config", None)
+        if enc_cfg is None:
+            raise ValueError("encoders_config is required to reconstruct PokerValueHeads")
+        # PokerComboModel.from_config expects the dict we returned in get_config
+        encoders = PokerComboModel.from_config(enc_cfg)
+        return cls(encoders=encoders, activation=activation, **config)
+
+
+@register_keras_serializable(package="Poker")
+class PokerCategoryModel(Model):
+    """
+    Model to convert embedding into hand category
+    
+    Inputs:
+        encoder model
+
+    Outputs:
+        hand category: ***integer***
+    """
+    def __init__(self, encoder, **kwargs):
+        super().__init__(**kwargs)
+        self.encoder = encoder
+        self.category_head = layers.Dense(9, activation="softmax")
+        self._category_config = {"encoder_class": encoder.__class__.__name__}
+
+    def call(self, inputs, training=False):
+        embedding = self.encoder(inputs, training=training)
+        category = self.category_head(embedding)
+        return category
+
+    def get_config(self):
+        base = super().get_config()
+        base.update({"config": dict(self._category_config)})
+        return base
+
+    @classmethod
+    def from_config(cls, config):
+        cfg = config.pop("config", {})
+        return cls(encoder=None, activation=cfg.get("activation", "softmax"), **config)
+
+    @property
+    def encoder_input_shape(self):
+        return self.encoder.input_shape_encoder
+
+@register_keras_serializable(package="Poker")
+class PokerCategoryHeads(tf.keras.Model):
+    """
+    Model to create encoder/value models for hand, board and combined.
+    """
+    def __init__(self, encoders=None, activation="sigmoid", **kwargs):
+        super().__init__(**kwargs)
+        if encoders == None:
+            raise ValueError("PokerValueHeads requires encoders parameter at construction time.")
+        self.encoders = encoders
+        self.hand_category = PokerCategoryModel(self.encoders.hand_encoder)
+        self.board_category = PokerCategoryModel(self.encoders.board_encoder)
+        self.combined_category = PokerCategoryModel(self.encoders.combined_encoder)
+        self.activation = activation
+
+    def call(self, inputs, training=False, return_all=True):
+    # def call(self, inputs, training=False, return_all=False):
+        hand, board, combo = inputs
+        print(f"🔍 Combo shape received: {combo.shape}")
+
+        hand_v = self.hand_category(hand, training=training)
+        board_v = self.board_category(board, training=training)
+        combined_v = self.combined_category(combo, training=training)
 
         if return_all:
             return hand_v, board_v, combined_v
@@ -387,42 +559,6 @@ class ComboConcatLayer(tf.keras.layers.Layer):
         # return (batch_size, h, w, c*3)
 
 
-def build_value_model(config):
-    """
-    Builds complete model for absolute_value training mode:
-        - input grid with three channels for hand/board/combined
-        - PokerComboModel contains three encoders, one each for hand/board/combined
-        - PokerValueHead contains three feed forward networks, one for each of hand/board/combined
-        - three sigmoid outputs, one for each of hand/value/combined
-
-    Args:
-        - config (dict): config for models
-    """
-    inputs = tf.keras.Input(config["input_shape"], name="poker_input") # (batch, 13, 4, 2)
-    
-    # --- Split and combine grids ---
-    hand = inputs[..., 0:1]         # (batch, 13, 4, 1)
-    board = inputs[..., 1:2]        # (batch, 13, 4, 1)
-    combo = ComboConcatLayer(name="combo_concat")([hand, board])
-
-    encoder_config = get_encoder_config(config)
-    encoder = PokerComboModel(encoder_config)
-    value_heads = PokerValueHeads(encoder, activation=config["activation"])
-    hand_v, board_v, combined_v = value_heads([hand, board, combo], training=True, return_all=True)
-
-    # --- Build Model ---
-    model = tf.keras.Model(inputs=inputs, outputs=[hand_v, board_v, combined_v])
-    
-    # --- Compile Model ---
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=config["lr"]),
-        loss=["mse", "mse", "mse"],
-        loss_weights=config["loss_weights"],
-        metrics=["mae", "mae", "mae"]
-    )
-
-    return model
-
 
 @register_keras_serializable(package="Poker")
 class PairwiseComparisonModel(Model):
@@ -520,6 +656,78 @@ class PairwiseComparisonHeads(tf.keras.Model):
         encoders = PokerComboModel.from_config(enc_cfg)
         return cls(encoders=encoders, activation=activation, **config)
 
+def build_value_model(config):
+    """
+    Builds complete model for absolute_value training mode:
+        - input grid with three channels for hand/board/combined
+        - PokerComboModel contains three encoders, one each for hand/board/combined
+        - PokerValueHead contains three feed forward networks, one for each of hand/board/combined
+        - three sigmoid outputs, one for each of hand/value/combined
+
+    Args:
+        - config (dict): config for models
+    """
+    inputs = tf.keras.Input(config["input_shape"], name="poker_input") # (batch, 13, 4, 2)
+    
+    # --- Split and combine grids ---
+    hand = inputs[..., 0:1]         # (batch, 13, 4, 1)
+    board = inputs[..., 1:2]        # (batch, 13, 4, 1)
+    combo = ComboConcatLayer(name="combo_concat")([hand, board])
+
+    encoder_config = get_encoder_config(config)
+    encoder = PokerComboModel(encoder_config)
+    value_heads = PokerValueHeads(encoder, activation=config["activation"])
+    hand_v, board_v, combined_v = value_heads([hand, board, combo], training=True, return_all=True)
+
+    # --- Build Model ---
+    model = tf.keras.Model(inputs=inputs, outputs=[hand_v, board_v, combined_v])
+    
+    # --- Compile Model ---
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=config["lr"]),
+        loss=["mse", "mse", "mse"],
+        loss_weights=config["loss_weights"],
+        metrics=["mae", "mae", "mae"]
+    )
+
+    return model
+
+def build_category_model(config):
+    """
+    Builds complete model for hand_category training mode:
+        - input grid with three channels for hand/board/combined
+        - PokerComboModel contains three encoders, one each for hand/board/combined
+        - PokerValueHead contains three feed forward networks, one for each of hand/board/combined
+        - three sigmoid outputs, one for each of hand/value/combined
+
+    Args:
+        - config (dict): config for models
+    """
+    inputs = tf.keras.Input(config["input_shape"], name="poker_input") # (batch, 13, 4, 2)
+    
+    # --- Split and combine grids ---
+    hand = inputs[..., 0:1]         # (batch, 13, 4, 1)
+    board = inputs[..., 1:2]        # (batch, 13, 4, 1)
+    combo = ComboConcatLayer(name="combo_concat")([hand, board])
+
+    encoder_config = get_encoder_config(config)
+    encoder = PokerComboModel(encoder_config)
+    category_heads = PokerCategoryHeads(encoder)
+    hand_v, board_v, combined_v = category_heads([hand, board, combo], training=True, return_all=True)
+
+    # --- Build Model ---
+    model = tf.keras.Model(inputs=inputs, outputs=[hand_v, board_v, combined_v])
+    
+    # --- Compile Model ---
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=config["lr"]),
+        loss=[tf.keras.losses.CategoricalCrossentropy()] * 3,      # <- use categorical for one-hot targets
+        loss_weights=config["loss_weights"],
+        metrics=[tf.keras.metrics.CategoricalAccuracy()] * 3      # <- categorical accuracy
+    )
+
+    return model
+
 def build_pairwise_model(config):
     inputs = tf.keras.Input(config["input_shape"], name="poker_input")
     
@@ -567,13 +775,15 @@ def create_encoders(config: dict) -> PokerComboModel:
     """
     enc = PokerComboModel(config)
 
-    dummy = tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1))))
+    dummy = tf.zeros((1, *config.get("input_shape_encoder", (14, 4, 1))))
+    # dummy = tf.zeros((1, *config.get("input_shape_encoder", (13, 4, 1))))
     try:
         _ = enc.hand_encoder(dummy, training=False)
         _ = enc.board_encoder(dummy, training=False)
         _ = enc.combined_encoder(dummy, training=False)
     except Exception:
-        dummy_combo = tf.zeros((1, *config.get("input_shape", (13, 4, 2))))
+        dummy_combo = tf.zeros((1, *config.get("input_shape", (14, 4, 2))))
+        # dummy_combo = tf.zeros((1, *config.get("input_shape", (13, 4, 2))))
         _ = enc(dummy_combo, training=False)
 
     return enc
@@ -601,7 +811,8 @@ def one_hot_grid_for_cards(cards, mode="combined"):
     # helper similar to your cards_to_tensor but produces (13,4,1) grid for a single set
     rank_to_idx = {'A':0,'K':1,'Q':2,'J':3,'T':4,'9':5,'8':6,'7':7,'6':8,'5':9,'4':10,'3':11,'2':12}
     suit_to_idx = {'s':0,'h':1,'d':2,'c':3}
-    grid = np.zeros((13,4,1), dtype=np.float32)
+    grid = np.zeros((14,4,1), dtype=np.float32)
+    # grid = np.zeros((13,4,1), dtype=np.float32)
     for card in cards:
         r = card[0].upper(); s = card[-1].lower()
         if r in rank_to_idx and s in suit_to_idx:

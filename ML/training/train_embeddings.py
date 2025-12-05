@@ -11,7 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 # from db_plo import DB_PLO, open_db
 # from data.db_loader import data_generator, data_generator_3_heads
-from data.generators import AbsoluteGenerator, PairwiseGenerator
+from data.generators import AbsoluteGenerator, PairwiseGenerator, CategoryGenerator
 from models.implementation import PokerCNNEncoder, PokerComboModel, PokerValueModel, SuitEquivariantLayer, PokerValueHeads, ComboConcatLayer
 # from models.utils import save_model, load_model
 from training.evaluation import evaluate_model
@@ -101,14 +101,29 @@ def main():
     validation_config["is_validation"] = True
 
     # Then create the validation generator
-    eval_gen = AbsoluteGenerator(validation_config) if config["mode"] == "absolute_value" else PairwiseGenerator(validation_config, mode_override="mix")   
-    eval_gen.preload_validation_data()
-    # eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="mix")
- 
     if config["mode"] == "absolute_value":
+        eval_gen = AbsoluteGenerator(validation_config)
+        eval_gen.preload_validation_data()        
         evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=20)
+    elif config["mode"] == "hand_category":
+        eval_gen = CategoryGenerator(validation_config)
+        evaluate_model(model, iter(eval_gen), model_type='hand_category', num_examples=20)
+        eval_gen.preload_validation_data()        
     else:
+        eval_gen = PairwiseGenerator(validation_config, mode_override="mix")
+        eval_gen.preload_validation_data()        
         evaluate_model(model, iter(eval_gen), model_type='pairwise', num_examples=50)
+  
+    # eval_gen = AbsoluteGenerator(validation_config) if config["mode"] == "absolute_value" else PairwiseGenerator(validation_config, mode_override="mix")   
+    # eval_gen.preload_validation_data()
+    # # eval_gen = AbsoluteGenerator(config) if config["mode"] == "absolute_value" else PairwiseGenerator(config, mode_override="mix")
+ 
+    # if config["mode"] == "absolute_value":
+    #     evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=20)
+    # elif config["mode"] == "hand_category":
+    #     evaluate_model(model, iter(eval_gen), model_type='hand_category', num_examples=20)
+    # else:
+    #     evaluate_model(model, iter(eval_gen), model_type='pairwise', num_examples=50)
 
 if __name__ == "__main__":
     main()

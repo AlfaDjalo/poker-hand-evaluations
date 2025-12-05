@@ -4,26 +4,29 @@ import numpy as np
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 # from ML.models.utils import load_model
-from ML.models.implementation import build_value_model, build_pairwise_model
+from ML.models.implementation import build_value_model, build_pairwise_model, build_category_model
 from ML.models.implementation import (
     PokerComboModel,
     PokerValueModel,
     PokerValueHeads,
+    PokerCategoryHeads,
+    PokerCategoryModel,
     PokerCNNEncoder,
     SuitEquivariantLayer, 
-    # PairwiseModel
     PairwiseComparisonModel,
     PairwiseComparisonHeads
 )
-from ML.data.generators import AbsoluteGenerator, PairwiseGenerator, AlternatingGenerator, create_tensor_grids
+from ML.data.generators import AbsoluteGenerator, PairwiseGenerator, AlternatingGenerator, CategoryGenerator, create_tensor_grids
 
-def load_value_model(path):
+def load_model(path):
     return tf.keras.models.load_model(
         path,
         custom_objects={
             'PokerComboModel': PokerComboModel,
             "PokerValueModel": PokerValueModel,
             'PokerValueHeads': PokerValueHeads,
+            "PokerCategoryModel": PokerCategoryModel,
+            "PokerCategoryHeads": PokerCategoryHeads,
             'PokerCNNEncoder': PokerCNNEncoder,
             'SuitEquivariantLayer': SuitEquivariantLayer,
             # 'PairwiseModel': PairwiseModel
@@ -41,7 +44,8 @@ def get_custom_objects():
         "PokerComboModel": PokerComboModel,
         "PokerValueHeads": PokerValueHeads,
         "PokerValueModel": PokerValueModel,
-        # 'PairwiseModel': PairwiseModel
+        "PokerCategoryModel": PokerCategoryModel,
+        "PokerCategoryHeads": PokerCategoryHeads,
         'PairwiseComparisonModel': PairwiseComparisonModel,
         'PairwiseComparisonHeads': PairwiseComparisonHeads,
         "SuitEquivariantLayer": SuitEquivariantLayer,
@@ -50,12 +54,15 @@ def get_custom_objects():
 def train_embeddings(config=None):
     """Handles model creation, data, compilation, and training."""
     mode = config["mode"]
+    metrics = None   # <-- ensure metrics exists for compile call later
     # --- Data ---
     if mode == "absolute_value":
         train_gen = AbsoluteGenerator(config)
     elif mode in ["board", "hand", "mix"]:
         train_gen = PairwiseGenerator(config)
         # train_gen = PairwiseGenerator(config, mode_override=mode)
+    elif mode == "hand_category":
+        train_gen = CategoryGenerator(config)
     elif mode == "alternating":
         train_gen = AlternatingGenerator(config)
 
@@ -68,6 +75,7 @@ def train_embeddings(config=None):
     shared_encoder_path = os.path.join(save_dir, config["shared_encoder_filename"])
     
     abs_model_path = os.path.join(save_dir, config["absolute_model_filename"])
+    category_model_path = os.path.join(save_dir, config["category_model_filename"])
     pairwise_model_path = os.path.join(save_dir, config["pairwise_model_filename"])
 
     os.makedirs(save_dir, exist_ok=True)
@@ -77,14 +85,19 @@ def train_embeddings(config=None):
     # if config["load_model"] and os.path.exists(config["save_path"]):
         if mode == "absolute_value":       
             print(f"🔄 Loading model from {abs_model_path}")
-            model = load_value_model(abs_model_path)
+            model = load_model(abs_model_path)
+        elif mode == "hand_category":
+            print(f"🔄 Loading model from {category_model_path}")
+            model = load_model(category_model_path)            
         else:
             print(f"🔄 Loading model from {pairwise_model_path}")
-            model = load_value_model(pairwise_model_path)
+            model = load_model(pairwise_model_path)
     else:
         print("🧱 Building new model...") 
         if mode=="absolute_value":
             model = build_value_model(config)
+        elif mode=="hand_category":
+            model = build_category_model(config)
         else:
             model = build_pairwise_model(config) 
 
@@ -95,20 +108,29 @@ def train_embeddings(config=None):
     # --- Compile ---
     if mode=="absolute_value":
         loss = ["mse", "mse", "mse"]
-        loss_weights = [0.3, 0.3, 0.4]
+        loss_weights = config["loss_weights"]
         lr = config["lr_absolute_value"]
-        # loss = tf.keras.losses.MeanSquaredError()
+    elif mode=="hand_category":
+        # generator provides one-hot labels => use categorical loss/metrics
+        loss = [tf.keras.losses.CategoricalCrossentropy()] * 3
+        loss_weights = config["loss_weights"]
+        metrics = [tf.keras.metrics.CategoricalAccuracy()] * 3
+        lr = config["lr_absolute_value"]
     else:
         loss = [
             tf.keras.losses.BinaryCrossentropy(from_logits=False),
             tf.keras.losses.BinaryCrossentropy(from_logits=False),
             tf.keras.losses.BinaryCrossentropy(from_logits=False)
-            ]
+        ]
         loss_weights = config.get("pairwise_loss_weights", [0.3, 0.3, 0.4])
         lr = config["lr_pairwise"]
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-    model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights)
+    # include metrics if set
+    if metrics is not None:
+        model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights, metrics=metrics)
+    else:
+        model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights)
 
     # ✅ Add verbose=1 to ReduceLROnPlateau to see when it triggers
     reduce_cfg = config["reduce_lr"]
@@ -167,7 +189,8 @@ def train_embeddings(config=None):
 
     if enc is not None:
         # Build each encoder manually
-        dummy = tf.zeros((1, 13, 4, 1))
+        dummy = tf.zeros((1, 14, 4, 1))
+        # dummy = tf.zeros((1, 13, 4, 1))
         enc.hand_encoder(dummy)
         enc.board_encoder(dummy)
         enc.combined_encoder(dummy)
@@ -194,13 +217,15 @@ def train_embeddings(config=None):
         val_gen = PairwiseGenerator(val_config)
     elif mode == "alternating":
         val_gen = AlternatingGenerator(val_config)
+    elif mode == "hand_category":
+        val_gen = CategoryGenerator(val_config)
     
     val_gen.preload_validation_data()
     
     # ✅ Pre-load ONE large validation batch from database
     print("📊 Pre-loading validation batch...")
     
-    if mode == "absolute_value":
+    if mode in ["absolute_value", "hand_category"]:
         sample_evals = val_gen.db.get_sample_evaluations(val_gen.db_batch_size)
         val_x, val_y = create_tensor_grids(mode, sample_evals)
     elif mode == "alternating":
@@ -221,16 +246,25 @@ def train_embeddings(config=None):
             val_x[1].numpy() if not isinstance(val_x[1], np.ndarray) else val_x[1]
         )
     else:
-        # Absolute value: single tensor
+        # Absolute value or category: single tensor
         val_gen._preloaded_x = val_x.numpy() if not isinstance(val_x, np.ndarray) else val_x
     
-    val_gen._preloaded_y = val_y.numpy() if not isinstance(val_y, np.ndarray) else val_y
+    # For category mode, convert y to one-hot
+    if mode == "hand_category":
+        # val_y is already normalized (0..1), convert back to class indices
+        val_y_np = val_y.numpy().reshape(-1)
+        treys_rank = (val_y_np * 7461).astype(int) + 1
+        class_idx = np.array([CategoryGenerator.rank_to_category(r) for r in treys_rank], dtype=np.int32)
+        val_gen._preloaded_y = tf.one_hot(class_idx, depth=9, dtype=tf.float32).numpy()
+    else:
+        val_gen._preloaded_y = val_y.numpy() if not isinstance(val_y, np.ndarray) else val_y
     
     # Print validation data size
     if isinstance(val_gen._preloaded_x, tuple):
         print(f"✅ Loaded {len(val_gen._preloaded_x[0])} validation samples (pairwise)")
     else:
-        print(f"✅ Loaded {len(val_gen._preloaded_x)} validation samples (absolute)")
+        print(f"✅ Loaded {len(val_gen._preloaded_x)} validation samples ({mode})")
+    print(f"✅ Validation y shape: {val_gen._preloaded_y.shape}")
 
     # --- Train ---
     model.fit(
@@ -246,6 +280,9 @@ def train_embeddings(config=None):
         if mode == "absolute_value":
             print(f"💾 Saving absolute model to {abs_model_path}")
             model.save(abs_model_path)
+        elif mode == "hand_category":
+            print(f"💾 Saving category model to {category_model_path}")
+            model.save(category_model_path)
         else:
             print(f"💾 Saving pairwise model to {pairwise_model_path}")
             model.save(pairwise_model_path)
@@ -282,7 +319,8 @@ def save_encoder(model, path):
     model.summary()
     if encoder:
         print(f"💾 Saving shared encoder weights to {path}")
-        dummy = tf.zeros((1, 13, 4, 2))
+        dummy = tf.zeros((1, 14, 4, 2))
+        # dummy = tf.zeros((1, 13, 4, 2))
         encoder(dummy, training=False)
         print(model.built)
         encoder.save(path)

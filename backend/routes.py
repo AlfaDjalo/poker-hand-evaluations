@@ -485,7 +485,8 @@ def setup_api_routes(app):
         suit_to_idx = {'s': 0, 'h': 1, 'd': 2, 'c': 3}
 
         # ----- Base empty grid -----
-        grid = np.zeros((13, 4, 1), dtype=np.float32)
+        grid = np.zeros((14, 4, 1), dtype=np.float32)
+        # grid = np.zeros((13, 4, 1), dtype=np.float32)
 
         # ----- Split cards based on mode -----
         if mode == "hand":
@@ -554,7 +555,8 @@ def setup_api_routes(app):
         suit_to_idx = {'s': 0, 'h': 1, 'd': 2, 'c': 3}
 
         # ----- Base empty grid -----
-        grid = np.zeros((13, 4, 2), dtype=np.float32)
+        grid = np.zeros((14, 4, 2), dtype=np.float32)
+        # grid = np.zeros((13, 4, 2), dtype=np.float32)
 
         # ----- Split cards based on mode -----
         if mode == "hand":
@@ -647,7 +649,8 @@ def debug_print_tensor(tensor, label=""):
 
     for ch in range(tensor.shape[-1]):    # channel 0/1
         print(f"\n--- Channel {ch} ---")
-        for r in range(13):               # each rank row
+        for r in range(14):               # each rank row
+        # for r in range(13):               # each rank row
             row_vals = []
             for s in range(4):            # each suit column
                 v = int(tensor[r, s, ch])

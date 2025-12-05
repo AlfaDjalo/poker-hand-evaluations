@@ -15,8 +15,9 @@ def get_config():
         # ---- General ----
         # "mode": "alternating",
         "mode": "absolute_value",
+        # "mode": "hand_category",
         "load_encoder_model": True,
-        "load_head_model": True,
+        "load_head_model": False,
         "save_model": True,
 
         # ---- Database ----
@@ -26,17 +27,19 @@ def get_config():
 
         # ---- Model ----
         "use_shared_encoder": True,
-        "input_shape": (13, 4, 2),
-        "input_shape_encoder": (13, 4, 1),
-        "filters": (8, 16, 32),
+        "input_shape": (14, 4, 2),
+        "input_shape_encoder": (14, 4, 1),
+        # "input_shape": (13, 4, 2),
+        # "input_shape_encoder": (13, 4, 1),
+        "filters": (32, 48, 64),
         "kernel_size": 2,
         "embedding_dim": 32,
         "hand_embedding_dim": 32,
         "board_embedding_dim": 32,
-        "combined_embedding_dim": 64,
-        "lr": 1e-5,
-        "lr_absolute_value": 1e-5,
-        "lr_pairwise": 1e-5,
+        "combined_embedding_dim": 32,
+        "lr": 1e-3,
+        "lr_absolute_value": 1e-3,
+        "lr_pairwise": 1e-3,
         "loss_weights": [0.3, 0.3, 0.4],
         "activation": "sigmoid",
         "use_equivariance": False, #True,
@@ -73,6 +76,7 @@ def get_config():
         "combined_encoder_filename":    "combined_encoder_model.keras",
         "shared_encoder_filename":      "shared_encoder_model.keras",
         "absolute_model_filename":      "poker_value_model.keras",
+        "category_model_filename":      "poker_category_model.keras",
         "pairwise_model_filename":      "poker_pairwise_model.keras",
         "log_dir":                      os.path.join(base_dir, "logs")
     }
