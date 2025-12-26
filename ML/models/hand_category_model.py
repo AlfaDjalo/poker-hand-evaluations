@@ -6,16 +6,11 @@ from .encoders import *
 @register_keras_serializable(package="Poker")
 class HandCategoryHead(Model):
     def __init__(self, **kwargs):
-    # def __init__(self, encoder, **kwargs):
         super().__init__(**kwargs)
-        # self.encoder = encoder
         self.category_head = layers.Dense(9, activation="softmax")
-        # self._category_config = {"encoder_class": encoder.__class__.__name__}
 
     def call(self, inputs, training=False):
-        # embedding = self.encoder(inputs, training=training)
         return self.category_head(inputs)
-        # return self.category_head(embedding)
 
 @register_keras_serializable(package="Poker")
 class CardStateHandCategoryHead(tf.keras.Model):
@@ -54,7 +49,6 @@ def build_hand_category_model(config):
     hand = inputs[..., 0:1]         # (batch, 13, 4, 1)
     board = inputs[..., 1:2]        # (batch, 13, 4, 1)
     combo = hand + board
-    # combo = ComboConcatLayer(name="combo_concat")([hand, board])
 
     encoder_config = get_encoder_config(config)
     encoder = CardStateEncoder(encoder_config)
@@ -63,19 +57,8 @@ def build_hand_category_model(config):
     category_heads = CardStateHandCategoryHead()
     hand_cat, board_cat, combined_cat = category_heads([hand_emb, board_emb, combo_emb], return_all=True)
 
-    # category_heads = CardStateHandCategoryHead(encoder)
-    # hand_v, board_v, combined_v = category_heads([hand, board, combo], training=True, return_all=True)
-
     # --- Build Model ---
     model = tf.keras.Model(inputs=inputs, outputs=[hand_cat, board_cat, combined_cat])
-    
-    # # --- Compile Model ---
-    # model.compile(
-    #     optimizer=tf.keras.optimizers.Adam(learning_rate=config["lr"]),
-    #     loss=[tf.keras.losses.CategoricalCrossentropy()] * 3,      # <- use categorical for one-hot targets
-    #     loss_weights=config["loss_weights"],
-    #     metrics=[tf.keras.metrics.CategoricalAccuracy()] * 3      # <- categorical accuracy
-    # )
 
     return model
 

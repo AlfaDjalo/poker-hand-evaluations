@@ -11,11 +11,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 from config import get_config, summarize_config
 from mode_config import get_mode_config
-# from training_mode_config import get_training_mode_config
 
-# from data.generators import AbsoluteGenerator, PairwiseGenerator, CategoryGenerator
-# from models.implementation import PokerCNNEncoder, PokerComboModel, PokerValueModel, SuitEquivariantLayer, PokerValueHeads, ComboConcatLayer
-# from training.evaluation import evaluate_model
 from training.trainer import train_embeddings
 from ML.data.generators import AdaptedGenerator, build_output_adapter
 
@@ -27,7 +23,6 @@ def main():
     config = get_config()
     # summarize_config(config)
     mode_config = get_mode_config(config["mode"])
-    # training_mode_config = get_training_mode_config(config["mode"])
     summarize_config(mode_config)
 
 
@@ -52,23 +47,6 @@ def main():
     evaluate_cls = mode_config["evaluation_function"]
     eval_kwargs = mode_config.get("evaluation_function_kwargs", {})
     evaluate_cls(model, iter(eval_gen), num_examples=50, **eval_kwargs)
-    
-    # # Make a validation config by copying and overriding is_validation
-
-    # # Then create the validation generator
-    # if config["mode"] in ["absolute_value", "embedding_value"]:
-    #     eval_gen = AbsoluteGenerator(validation_config)
-    #     eval_gen.preload_validation_data()        
-    #     evaluate_model(model, iter(eval_gen), model_type='absolute', num_examples=20)
-    # elif config["mode"] == "hand_category":
-    #     eval_gen = CategoryGenerator(validation_config)
-    #     # evaluate_model(model, iter(eval_gen), model_type='hand_category', num_examples=20, full_confusion=False)
-    #     evaluate_model(model, iter(eval_gen), model_type='hand_category', num_examples=20, full_confusion=True)
-    #     eval_gen.preload_validation_data()        
-    # else:
-    #     eval_gen = PairwiseGenerator(validation_config, mode_override="mix")
-    #     eval_gen.preload_validation_data()        
-    #     evaluate_model(model, iter(eval_gen), model_type='pairwise', num_examples=50)
-  
+      
 if __name__ == "__main__":
     main()

@@ -1,30 +1,30 @@
 ```mermaid
 flowchart TD
-  In[Poker Input 13x4x2]
-  In --> HandGrid[Hand Grid 13x4x1]
-  In --> BoardGrid[Board Grid 13x4x1]
+  In[Poker Input 14x4x2]
+  In --> HandGrid[Hand Grid 14x4x1]
+  In --> BoardGrid[Board Grid 14x4x1]
   HandGrid --> ComboConcat[ComboConcatLayer: stack hand, board, hand_plus_board]
-  ComboConcat --> CombinedGrid[Combined Grid 13x4x3]
   BoardGrid --> ComboConcat[ComboConcatLayer: stack hand, board, hand_plus_board]
+  ComboConcat --> CombinedGrid[Combined Grid 13x4x3]
 
   %% SIMPLE SUBGRAPH TITLE, NO PARENTHESES
-  subgraph ComboModel["PokerComboModel - shared encoders"]
-    HandEnc[Hand Encoder - PokerCNNEncoder]
-    CombinedEnc[Combined Encoder - PokerCNNEncoder]
-    BoardEnc[Board Encoder - PokerCNNEncoder]
+  subgraph CardStateEncoder["CardStateEncoder"]
+    HandEnc[Hand Encoder - CardSetEncoder]
+    BoardEnc[Board Encoder - CardSetEncoder]
+    CombinedEnc[Combined Encoder - CardSetEncoder]
   end
 
   HandGrid --> HandEnc --> HandEmb[Hand Embedding]
-  CombinedGrid --> CombinedEnc --> ComboEmb[Combined Embedding]
   BoardGrid --> BoardEnc --> BoardEmb[Board Embedding]
+  CombinedGrid --> CombinedEnc --> ComboEmb[Combined Embedding]
 
   %% ANOTHER SIMPLE SUBGRAPH TITLE
-  subgraph ValueHeads["PokerValueHeads"]
-    HandHead[Hand Value Head]
-    ComboHead[Combined Value Head]
-    BoardHead[Board Value Head]
+  subgraph GridValueHeads["Grid Value Head - CardStateGridValueHead"]
+    HandHead[Hand Value Head - GridValueHead]
+    BoardHead[Board Value Head - GridValueHead]
+    ComboHead[Combined Value Head - GridValueHead]
   end
 
-  HandEmb --> HandHead --> HandValue[hand_value]
-  ComboEmb --> ComboHead --> CombinedValue[combined_value]
-  BoardEmb --> BoardHead --> BoardValue[board_value]
+  HandEmb --> HandHead --> HandValue[Hand Value]
+  BoardEmb --> BoardHead --> BoardValue[Board Value]
+  ComboEmb --> ComboHead --> CombinedValue[Combined Value]

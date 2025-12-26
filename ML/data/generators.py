@@ -59,7 +59,6 @@ def create_tensor_grids(pairwise=False, rows=None):
     
 
     if pairwise:
-    # if mode in ["absolute_value", "embedding_value", "hand_category"]:
         inputs_A = []
         inputs_B = []
     else:
@@ -69,7 +68,6 @@ def create_tensor_grids(pairwise=False, rows=None):
 
     for row in rows:
         if pairwise:
-        # if mode in ["absolute_value", "embedding_value", "hand_category"]:
             (hand_A, hand_B, board_A, board_B, high_value_A, high_value_B) = row
             grid_A = create_grids(hand_A, board_A)
             grid_B = create_grids(hand_B, board_B)
@@ -88,7 +86,6 @@ def create_tensor_grids(pairwise=False, rows=None):
             labels.append((high_value - 1) / 7461.0)
 
     if pairwise:
-    # if mode in ["absolute_value", "embedding_value", "hand_category"]:
         x = (
             tf.convert_to_tensor(np.stack(inputs_A)),
             tf.convert_to_tensor(np.stack(inputs_B))
@@ -202,11 +199,6 @@ class BaseGenerator(tf.keras.utils.Sequence):
         self._preloaded_x = None  # ✅ Cache for validation data
         self._preloaded_y = None
 
-    # def __init__(self, db, batch_size, mode):
-        # self.db = db
-        # self.batch_size = batch_size
-        # self.mode = mode
-
     def __len__(self):
         return 100 # unused ?
 
@@ -309,7 +301,6 @@ class ValueGenerator(BaseGenerator):
         
         # Convert rows to tensors using existing helper
         x_tensor, y_tensor = create_tensor_grids(False, sample_evaluations)
-        # x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
         
         # Cache the numpy arrays for slicing in __getitem__
         self._preloaded_x = x_tensor.numpy()
@@ -355,7 +346,6 @@ class HandCategoryGenerator(ValueGenerator):
 
         # Reuse your existing tensor builder
         x_tensor, rank_tensor = create_tensor_grids(False, sample_evaluations)
-        # x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
 
         # rank_tensor is shape (N, 1) normalized 0..1
         # convert back to treys rank (1..7461)
@@ -371,15 +361,6 @@ class HandCategoryGenerator(ValueGenerator):
         # Return x and ONE-HOT y
         return x_tensor.numpy(), category_onehot
 
-        # # rank_tensor is shape (N, 1) or (N,)
-        # rank_np = rank_tensor.numpy().reshape(-1)
-
-        # # Convert to category class (vectorized)
-        # category_np = np.array([self.rank_to_category(r) for r in rank_np], dtype=np.int32)
-
-        # # Model expects 3 identical heads
-        # return x_tensor.numpy(), category_np
-
     def __getitem__(self, idx):
         if self.is_validation and self._preloaded_x is not None:
             start = (idx * self.batch_size) % len(self._preloaded_x)
@@ -387,7 +368,6 @@ class HandCategoryGenerator(ValueGenerator):
 
             y_batch = self._preloaded_y[start:end]
             return self._preloaded_x[start:end], y_batch
-            # return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
 
         if not hasattr(self, 'x'):
             self.x, self.y = self._load_new_batch()
@@ -403,7 +383,6 @@ class HandCategoryGenerator(ValueGenerator):
         batch_y_aug = np.repeat(batch_y, 24, axis=0)
 
         return batch_x_aug, batch_y_aug
-        # return batch_x_aug, (batch_y_aug, batch_y_aug, batch_y_aug)
 
     def preload_validation_data(self):
         """
@@ -411,7 +390,6 @@ class HandCategoryGenerator(ValueGenerator):
         """
         sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
         x_tensor, rank_tensor = create_tensor_grids(False, sample_evaluations)
-        # x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
 
         rank_np = rank_tensor.numpy().reshape(-1)
         # Convert normalized rank back to treys rank (1..7461)
@@ -541,7 +519,6 @@ class AlternatingGenerator(PairwiseComparisonGenerator):
         """ Pull a new large batch from DB and convert to tensors. """
         sample_evaluations = self.db.get_comparison_pairs(self.current_mode, self.db_batch_size)
         x_tensor, y_tensor = create_tensor_grids(True, sample_evaluations)
-        # x_tensor, y_tensor = create_tensor_grids(self.current_mode, sample_evaluations)
         return x_tensor, y_tensor
 
     def __len__(self):
@@ -574,7 +551,6 @@ class AlternatingGenerator(PairwiseComparisonGenerator):
         y_batch = self.y[start:end]
         
         return (x_A, x_B), y_batch
-        # return (x_A, x_B), (y_batch, y_batch, y_batch)
 
     def on_epoch_end(self):
         """Reload data with next mode in cycle (training only)."""

@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 
 from ML.data.generators import ValueGenerator, PairwiseComparisonGenerator, AlternatingGenerator, HandCategoryGenerator
 from training.evaluation import evaluate_grid_value, evaluate_embedding_value, evaluate_pairwise_comparison, evaluate_hand_category
-from ML.models.implementation import *
+from ML.models import *
 
 def _hand_category_config():
     return {
