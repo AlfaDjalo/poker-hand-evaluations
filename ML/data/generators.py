@@ -6,12 +6,12 @@ import itertools
 RANKS = 'AKQJT98765432'
 SUITS = 'shdc'
 
-def create_tensor_grids(mode, rows):
+def create_tensor_grids(pairwise=False, rows=None):
     """
     Function for converting database rows to model input data for absolute_value model.
     
     Args:
-        mode (str): Training mode
+        mode (int): 0 - single hand; 1 - pair of hands
         rows (tuple): Database rows, tuples of (hand_mask, board_mask, high_value, low_value)
 
     Returns:
@@ -58,21 +58,18 @@ def create_tensor_grids(mode, rows):
         return combined
     
 
-    if mode in ["absolute_value", "hand_category"]:
-        inputs = []
-    else:
+    if pairwise:
+    # if mode in ["absolute_value", "embedding_value", "hand_category"]:
         inputs_A = []
         inputs_B = []
+    else:
+        inputs = []
     
     labels = []
 
     for row in rows:
-        if mode in ["absolute_value", "hand_category"]:
-            (hand_mask, board_mask, high_value, low_value) = row
-            combined = create_grids(hand_mask, board_mask)
-            inputs.append(combined)
-            labels.append((high_value - 1) / 7461.0)
-        else:
+        if pairwise:
+        # if mode in ["absolute_value", "embedding_value", "hand_category"]:
             (hand_A, hand_B, board_A, board_B, high_value_A, high_value_B) = row
             grid_A = create_grids(hand_A, board_A)
             grid_B = create_grids(hand_B, board_B)
@@ -84,14 +81,20 @@ def create_tensor_grids(mode, rows):
                 labels.append(0.5)
             else:
                 labels.append(1.0 if high_value_A < high_value_B else 0.0)
+        else:
+            (hand_mask, board_mask, high_value, low_value) = row
+            combined = create_grids(hand_mask, board_mask)
+            inputs.append(combined)
+            labels.append((high_value - 1) / 7461.0)
 
-    if mode in ["absolute_value", "hand_category"]:
-        x = tf.convert_to_tensor(np.stack(inputs))
-    else:
+    if pairwise:
+    # if mode in ["absolute_value", "embedding_value", "hand_category"]:
         x = (
             tf.convert_to_tensor(np.stack(inputs_A)),
             tf.convert_to_tensor(np.stack(inputs_B))
         )
+    else:
+        x = tf.convert_to_tensor(np.stack(inputs))
 
     y = tf.convert_to_tensor(np.array(labels), dtype=tf.float32)[..., None]
     
@@ -232,9 +235,9 @@ class BaseGenerator(tf.keras.utils.Sequence):
     
 
 # ==========================================================
-# Absolute value generator (supervised regression)
+# Value generator (supervised regression)
 # ==========================================================
-class AbsoluteGenerator(BaseGenerator):
+class ValueGenerator(BaseGenerator):
     """Fetches absolute combo value samples for regression training."""
     def __init__(self, config):
         super().__init__(config)
@@ -244,7 +247,8 @@ class AbsoluteGenerator(BaseGenerator):
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
         sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
-        x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        x_tensor, y_tensor = create_tensor_grids(False, sample_evaluations)
+        # x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
         return x_tensor.numpy(), y_tensor.numpy()
 
     def __len__(self):
@@ -258,7 +262,8 @@ class AbsoluteGenerator(BaseGenerator):
             start = (idx * self.batch_size) % len(self._preloaded_x)
             end = start + self.batch_size
             y_batch = self._preloaded_y[start:end]
-            return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
+            return self._preloaded_x[start:end], y_batch
+            # return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
 
         if not hasattr(self, 'x'):
             self.x, self.y = self._load_new_batch()
@@ -273,6 +278,7 @@ class AbsoluteGenerator(BaseGenerator):
         batch_x_aug = augment_batch_with_suit_permutations(batch_x)
         batch_y_aug = np.repeat(batch_y, 24, axis=0) # repeat labels for augmentation batch
 
+        return batch_x_aug, batch_y_aug
         return batch_x_aug, (batch_y_aug, batch_y_aug, batch_y_aug)
 
     def __getitem_old__(self, idx):
@@ -302,7 +308,8 @@ class AbsoluteGenerator(BaseGenerator):
         sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
         
         # Convert rows to tensors using existing helper
-        x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        x_tensor, y_tensor = create_tensor_grids(False, sample_evaluations)
+        # x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
         
         # Cache the numpy arrays for slicing in __getitem__
         self._preloaded_x = x_tensor.numpy()
@@ -313,7 +320,7 @@ class AbsoluteGenerator(BaseGenerator):
 # ==========================================================
 # Category generator (supervised classification)
 # ==========================================================
-class CategoryGenerator(AbsoluteGenerator):
+class HandCategoryGenerator(ValueGenerator):
     """
     Same as AbsoluteGenerator, but converts treys rank values
     into a categorical class {0..8}.
@@ -322,22 +329,22 @@ class CategoryGenerator(AbsoluteGenerator):
     @staticmethod
     def rank_to_category(rank):
         if 1 <= rank <= 10:
-            return 0
+            return 0                    # Straight Flush
         if 11 <= rank <= 166:
-            return 1
+            return 1                    # Quads
         if 167 <= rank <= 322:
-            return 2
+            return 2                    # Full House
         if 323 <= rank <= 1599:
-            return 3
+            return 3                    # Flush
         if 1600 <= rank <= 1609:
-            return 4
+            return 4                    # Straight
         if 1610 <= rank <= 2467:
-            return 5
+            return 5                    # Trips
         if 2468 <= rank <= 3325:
-            return 6
+            return 6                    # Two Pair
         if 3326 <= rank <= 6185:
-            return 7
-        return 8
+            return 7                    # One Pair
+        return 8                        # No Pair
 
     def _load_new_batch(self):
         """
@@ -347,7 +354,8 @@ class CategoryGenerator(AbsoluteGenerator):
         sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
 
         # Reuse your existing tensor builder
-        x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        x_tensor, rank_tensor = create_tensor_grids(False, sample_evaluations)
+        # x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
 
         # rank_tensor is shape (N, 1) normalized 0..1
         # convert back to treys rank (1..7461)
@@ -378,7 +386,8 @@ class CategoryGenerator(AbsoluteGenerator):
             end = start + self.batch_size
 
             y_batch = self._preloaded_y[start:end]
-            return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
+            return self._preloaded_x[start:end], y_batch
+            # return self._preloaded_x[start:end], (y_batch, y_batch, y_batch)
 
         if not hasattr(self, 'x'):
             self.x, self.y = self._load_new_batch()
@@ -393,14 +402,16 @@ class CategoryGenerator(AbsoluteGenerator):
         batch_x_aug = augment_batch_with_suit_permutations(batch_x)
         batch_y_aug = np.repeat(batch_y, 24, axis=0)
 
-        return batch_x_aug, (batch_y_aug, batch_y_aug, batch_y_aug)
+        return batch_x_aug, batch_y_aug
+        # return batch_x_aug, (batch_y_aug, batch_y_aug, batch_y_aug)
 
     def preload_validation_data(self):
         """
         Load validation batch and convert rank values → one-hot categories.
         """
         sample_evaluations = self.db.get_sample_evaluations(self.db_batch_size)
-        x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        x_tensor, rank_tensor = create_tensor_grids(False, sample_evaluations)
+        # x_tensor, rank_tensor = create_tensor_grids(self.mode, sample_evaluations)
 
         rank_np = rank_tensor.numpy().reshape(-1)
         # Convert normalized rank back to treys rank (1..7461)
@@ -417,7 +428,7 @@ class CategoryGenerator(AbsoluteGenerator):
 # ==========================================================
 # Pairwise generator (supervised regression)
 # ==========================================================
-class PairwiseGenerator(BaseGenerator):
+class PairwiseComparisonGenerator(BaseGenerator):
     """Fetches pairwise comparison samples for training."""
     def __init__(self, config, mode_override=None):
         super().__init__(config)
@@ -429,7 +440,8 @@ class PairwiseGenerator(BaseGenerator):
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
         sample_evaluations = self.db.get_comparison_pairs(self.mode, self.db_batch_size)
-        x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
+        x_tensor, y_tensor = create_tensor_grids(True, sample_evaluations)
+        # x_tensor, y_tensor = create_tensor_grids(self.mode, sample_evaluations)
         return x_tensor, y_tensor
 
     def __len__(self):
@@ -503,7 +515,8 @@ class PairwiseGenerator(BaseGenerator):
         # Always validate on 'mix'
         val_mode = "mix"
         sample_evaluations = self.db.get_comparison_pairs(val_mode, self.db_batch_size)
-        x_tensor, y_tensor = create_tensor_grids(val_mode, sample_evaluations)
+        x_tensor, y_tensor = create_tensor_grids(True, sample_evaluations)
+        # x_tensor, y_tensor = create_tensor_grids(val_mode, sample_evaluations)
 
         self._preloaded_x = (x_tensor[0].numpy(), x_tensor[1].numpy())
         self._preloaded_y = y_tensor.numpy()
@@ -512,7 +525,7 @@ class PairwiseGenerator(BaseGenerator):
 # ==========================================================
 # Alternating generator (mixes pair types)
 # ==========================================================
-class AlternatingGenerator(PairwiseGenerator):
+class AlternatingGenerator(PairwiseComparisonGenerator):
     """Mixes 'board' and 'hand' pair types dynamically."""
     def __init__(self, config, cycle=("board", "hand", "mix")):
         BaseGenerator.__init__(self, config)
@@ -527,7 +540,8 @@ class AlternatingGenerator(PairwiseGenerator):
     def _load_new_batch(self):
         """ Pull a new large batch from DB and convert to tensors. """
         sample_evaluations = self.db.get_comparison_pairs(self.current_mode, self.db_batch_size)
-        x_tensor, y_tensor = create_tensor_grids(self.current_mode, sample_evaluations)
+        x_tensor, y_tensor = create_tensor_grids(True, sample_evaluations)
+        # x_tensor, y_tensor = create_tensor_grids(self.current_mode, sample_evaluations)
         return x_tensor, y_tensor
 
     def __len__(self):
@@ -545,6 +559,7 @@ class AlternatingGenerator(PairwiseGenerator):
             x_B = self._preloaded_x[1][start:end]
             y_batch = self._preloaded_y[start:end]
             
+            return (x_A, x_B), y_batch
             return (x_A, x_B), (y_batch, y_batch, y_batch)
         
         # Training mode: load fresh batch each call
@@ -558,7 +573,8 @@ class AlternatingGenerator(PairwiseGenerator):
         x_B = self.x[1][start:end]
         y_batch = self.y[start:end]
         
-        return (x_A, x_B), (y_batch, y_batch, y_batch)
+        return (x_A, x_B), y_batch
+        # return (x_A, x_B), (y_batch, y_batch, y_batch)
 
     def on_epoch_end(self):
         """Reload data with next mode in cycle (training only)."""
@@ -567,4 +583,43 @@ class AlternatingGenerator(PairwiseGenerator):
             self.x, self.y = self._load_new_batch()
 
 
+class AdaptedGenerator(tf.keras.utils.Sequence):
+    def __init__(self, base_generator, adapter):
+        self.base = base_generator
+        self.adapter = adapter
 
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx):
+        x, y = self.base[idx]
+        return self.adapter.adapt(x, y)
+
+    def on_epoch_end(self):
+        if hasattr(self.base, "on_epoch_end"):
+            self.base.on_epoch_end()
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
+    
+
+class IdentityAdapter:
+    def adapt(self, x, y):
+        return x, y
+
+class RepeatTargetAdapter:
+    def __init__(self, count):
+        self.count = count
+
+    def adapt(self, x, y):
+        return x, tuple(y for _ in range(self.count))
+
+def build_output_adapter(output_adapter):
+    type = output_adapter.get("type", "identity")
+    count = output_adapter.get("count", 1)
+    if type == "identity":
+        return IdentityAdapter()
+    elif type == "repeat":
+        return RepeatTargetAdapter(count)
+
+    raise ValueError(f"Unknown output adapter: {type}")
