@@ -138,9 +138,9 @@ class CardStateEncoder(tf.keras.Model):
 def get_encoder_config(global_config):
     return {
         "encoder_input_shape": global_config["encoder_input_shape"],
-        "filters": global_config["filters"],
-        "kernel_size": global_config["kernel_size"],
+        # "filters": global_config["filters"],
+        # "kernel_size": global_config["kernel_size"],
         "embedding_dim": global_config["embedding_dim"],
-        "use_equivariance": global_config["use_equivariance"],
-        "use_shared_encoder": global_config.get("use_shared_encoder", False),
+        # "use_equivariance": global_config["use_equivariance"],
+        # "use_shared_encoder": global_config.get("use_shared_encoder", False),
     }

@@ -56,13 +56,18 @@ def build_grid_value_model(config):
     combo = hand + board
 
     encoder_config = get_encoder_config(config)
-    encoder = CardStateEncoder(encoder_config)
-    hand_emb, board_emb, combo_emb = encoder([hand, board, combo])
+    encoder = CardSetEncoder(encoder_config)
+    # encoder = CardStateEncoder(encoder_config)
+    combo_emb = encoder(combo)
+    # hand_emb, board_emb, combo_emb = encoder([hand, board, combo])
 
-    value_heads = CardStateGridValueHead()
-    hand_value, board_value, combined_value = value_heads([hand_emb, board_emb, combo_emb], return_all=True)
+    value_head = GridValueHead()
+    # value_heads = CardStateGridValueHead()
+    combined_value = value_head(combo_emb)
+    # hand_value, board_value, combined_value = value_heads([hand_emb, board_emb, combo_emb], return_all=True)
 
     # --- Build Model ---
-    model = tf.keras.Model(inputs=inputs, outputs=[hand_value, board_value, combined_value])
+    model = tf.keras.Model(inputs=inputs, outputs=combined_value)
+    # model = tf.keras.Model(inputs=inputs, outputs=[hand_value, board_value, combined_value])
     
     return model

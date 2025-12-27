@@ -12,14 +12,18 @@ def load_model(path):
         custom_objects={
             'CardSetEncoder': CardSetEncoder,
             'CardStateEncoder': CardStateEncoder,
-            "GridValueHead": GridValueHead,
-            'CardStateGridValueHead': CardStateGridValueHead,
-            "EmbeddingValueHead": EmbeddingValueHead,
-            'PairwiseComparisonHead': PairwiseComparisonHead,
-            'CardStatePairwiseComparisonHead': CardStatePairwiseComparisonHead,
-            "HandCategoryHead": HandCategoryHead,
-            "CardStateHandCategoryHead": CardStateHandCategoryHead,
-            "WeightedCategoricalCrossentropy": WeightedCategoricalCrossentropy,
+            "CombinedInputValueHead": CombinedInputValueHead,
+            "SeparateInputValueHead": SeparateInputValueHead,
+            "CombinedPairwiseComparisonValueHead": CombinedInputPairwiseComparisonHead,
+            "SeparateInputPairwiseComparisonHead": SeparateInputPairwiseComparisonHead,
+            # "GridValueHead": GridValueHead,
+            # 'CardStateGridValueHead': CardStateGridValueHead,
+            # "EmbeddingValueHead": EmbeddingValueHead,
+            # 'PairwiseComparisonHead': PairwiseComparisonHead,
+            # 'CardStatePairwiseComparisonHead': CardStatePairwiseComparisonHead,
+            # "HandCategoryHead": HandCategoryHead,
+            # "CardStateHandCategoryHead": CardStateHandCategoryHead,
+            # "WeightedCategoricalCrossentropy": WeightedCategoricalCrossentropy,
         },
         compile=False,   # load without attempting to deserialize/compile saved compile config
         safe_mode=False
@@ -31,14 +35,18 @@ def get_custom_objects():
     return {
         'CardSetEncoder': CardSetEncoder,
         'CardStateEncoder': CardStateEncoder,
-        "GridValueHead": GridValueHead,
-        'CardStateGridValueHead': CardStateGridValueHead,
-        "EmbeddingValueHead": EmbeddingValueHead,
-        'PairwiseComparisonHead': PairwiseComparisonHead,
-        'CardStatePairwiseComparisonHead': CardStatePairwiseComparisonHead,
-        "HandCategoryHead": HandCategoryHead,
-        "CardStateHandCategoryHead": CardStateHandCategoryHead,
-        "WeightedCategoricalCrossentropy": WeightedCategoricalCrossentropy,
+        "CombinedInputValueHead": CombinedInputValueHead,
+        "SeparateInputValueHead": SeparateInputValueHead,
+        "CombinedPairwiseComparisonValueHead": CombinedInputPairwiseComparisonHead,
+        "SeparateInputPairwiseComparisonHead": SeparateInputPairwiseComparisonHead,
+        # "GridValueHead": GridValueHead,
+        # 'CardStateGridValueHead': CardStateGridValueHead,
+        # "EmbeddingValueHead": EmbeddingValueHead,
+        # 'PairwiseComparisonHead': PairwiseComparisonHead,
+        # 'CardStatePairwiseComparisonHead': CardStatePairwiseComparisonHead,
+        # "HandCategoryHead": HandCategoryHead,
+        # "CardStateHandCategoryHead": CardStateHandCategoryHead,
+        # "WeightedCategoricalCrossentropy": WeightedCategoricalCrossentropy,
         # 'SuitPermutationLayer': SuitPermutationLayer,
     }
 
@@ -61,7 +69,8 @@ def train_embeddings(config=None, mode_config=None):
     os.makedirs(save_dir, exist_ok=True)
     
     encoder_path = os.path.join(save_dir, config["encoder_filename"])
-    model_path = os.path.join(save_dir, mode_config["save_file"])
+    model_filename = config.get("submode", "combined") + "_" + mode_config["save_file"]
+    model_path = os.path.join(save_dir, model_filename)
 
     # --- Model creation or load ---
     if config["load_head_model"]:
@@ -69,9 +78,10 @@ def train_embeddings(config=None, mode_config=None):
         model = load_model(model_path)
     else:
         print("🧱 Building new model...") 
-        build_function_cls = mode_config["build_function"]
+        # build_function_cls = mode_config["build_function"]
         # build_function_kwargs = training_mode_config.get("build_function_kwargs", {})
-        model = build_function_cls(config)
+        # model = build_function_cls(config)
+        model = build_model(config, mode_config)
 
     if config["load_encoder_model"]:
         # load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path, shared_encoder_path)

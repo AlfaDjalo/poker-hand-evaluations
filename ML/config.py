@@ -12,11 +12,17 @@ def get_config():
     base_dir = os.path.dirname(os.path.dirname(__file__))
 
     config = {
-        # ---- General ----
-        # "mode": "hand_category",
-        "mode": "grid_value",
+        # ---- Modes ----
+        "mode": "hand_category",
+        # "mode": "grid_value",
+        # "mode": "value",
         # "mode": "alternating",
         # "mode": "embedding_value",
+
+        # "submode": "combined",
+        "submode": "separate",
+        
+        # ---- Save / Load Models ----
         "load_encoder_model": True,
         "load_head_model": True,
         "save_model": True,
