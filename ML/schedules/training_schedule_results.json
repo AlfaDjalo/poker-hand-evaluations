@@ -1,0 +1,79 @@
+{
+  "results": [
+    {
+      "job": {
+        "mode": "hand_category",
+        "submode": "combined",
+        "load_encoder_model": true,
+        "load_head_model": true,
+        "save_encoder_model": false,
+        "save_head_model": true,
+        "use_dual_optimizer": false,
+        "epochs": 5,
+        "head_lr": 0.001,
+        "encoder_lr": 0.0001
+      },
+      "start_time": 1767069737.8381557,
+      "end_time": 1767070077.3728092,
+      "duration_seconds": 339.5346534252167,
+      "model_path": null,
+      "encoder_path": null,
+      "encoder_lr": null,
+      "head_lr": 0.001,
+      "evaluation": null,
+      "history_keys": [
+        "categorical_accuracy",
+        "loss",
+        "val_categorical_accuracy",
+        "val_loss",
+        "learning_rate"
+      ],
+      "success": true,
+      "message": null,
+      "summary": {
+        "best_val_loss": 0.13864722847938538,
+        "final_val_loss": 0.16460026800632477,
+        "best_loss": 1.2767040061589796e-05,
+        "final_loss": 0.0001291253138333559,
+        "best_val_categorical_accuracy": 0.9865000247955322,
+        "final_val_categorical_accuracy": 0.984375
+      }
+    },
+    {
+      "job": {
+        "mode": "hand_category",
+        "submode": "separate",
+        "load_encoder_model": true,
+        "load_head_model": false,
+        "save_encoder_model": false,
+        "save_head_model": true,
+        "use_dual_optimizer": true,
+        "epochs": 5,
+        "head_lr": 0.001,
+        "encoder_lr": 0.0001
+      },
+      "start_time": 1767070329.7412534,
+      "end_time": 1767070724.2613072,
+      "duration_seconds": 394.5200538635254,
+      "model_path": null,
+      "encoder_path": null,
+      "encoder_lr": 0.0001,
+      "head_lr": 0.001,
+      "evaluation": null,
+      "history_keys": [
+        "categorical_accuracy",
+        "loss",
+        "val_loss",
+        "learning_rate"
+      ],
+      "success": true,
+      "message": null,
+      "summary": {
+        "best_val_loss": 0.0,
+        "final_val_loss": 0.0,
+        "best_loss": 0.0,
+        "final_loss": 0.0
+      }
+    }
+  ]
+}

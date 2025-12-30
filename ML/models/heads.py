@@ -43,12 +43,13 @@ class SeparateInputValueHead(Model):
 class CombinedInputPairwiseComparisonHead(Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.concat = layers.Concatenate(axis=-1)
         self.pairwise_head = layers.Dense(1, activation="sigmoid")
 
     def __call__(self, inputs, training=False):
         embedding_A = inputs["combo_emb_A"]
         embedding_B = inputs["combo_emb_B"]
-        combined_embeddings = tf.concat([embedding_A, embedding_B], axis=-1)
+        combined_embeddings = self.concat([embedding_A, embedding_B])
         return self.pairwise_head(combined_embeddings)
 
 
@@ -56,6 +57,7 @@ class CombinedInputPairwiseComparisonHead(Model):
 class SeparateInputPairwiseComparisonHead(Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.concat = layers.Concatenate(axis=-1)
         self.pairwise_head = layers.Dense(1, activation="sigmoid")
 
     def __call__(self, inputs, training=False):
@@ -63,9 +65,9 @@ class SeparateInputPairwiseComparisonHead(Model):
         hand_embedding_B = inputs["hand_emb_B"]
         board_embedding_A = inputs["board_emb_A"]
         board_embedding_B = inputs["board_emb_B"]
-        combined_embedding_A = tf.concat([hand_embedding_A, board_embedding_A], axis=-1)
-        combined_embedding_B = tf.concat([hand_embedding_B, board_embedding_B], axis=-1)
-        stacked_emb = tf.keras.layers.Concatenate(name="hand_board_concat")([combined_embedding_A, combined_embedding_B])
+        combined_embedding_A = self.concat([hand_embedding_A, board_embedding_A])
+        combined_embedding_B = self.concat([hand_embedding_B, board_embedding_B])
+        stacked_emb = self.concat([combined_embedding_A, combined_embedding_B])
         return self.pairwise_head(stacked_emb)
 
 

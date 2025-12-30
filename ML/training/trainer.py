@@ -2,9 +2,10 @@ import os
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
+import copy, time, json
 
 from ML.models import *
-from ML.data.generators import AdaptedGenerator, build_output_adapter
+from ML.training.dual_optimizer import DualOptimizerModel
 
 def load_model(path):
     return tf.keras.models.load_model(
@@ -16,13 +17,6 @@ def load_model(path):
             "SeparateInputValueHead": SeparateInputValueHead,
             "CombinedPairwiseComparisonValueHead": CombinedInputPairwiseComparisonHead,
             "SeparateInputPairwiseComparisonHead": SeparateInputPairwiseComparisonHead,
-            # "GridValueHead": GridValueHead,
-            # 'CardStateGridValueHead': CardStateGridValueHead,
-            # "EmbeddingValueHead": EmbeddingValueHead,
-            # 'PairwiseComparisonHead': PairwiseComparisonHead,
-            # 'CardStatePairwiseComparisonHead': CardStatePairwiseComparisonHead,
-            # "HandCategoryHead": HandCategoryHead,
-            # "CardStateHandCategoryHead": CardStateHandCategoryHead,
             # "WeightedCategoricalCrossentropy": WeightedCategoricalCrossentropy,
         },
         compile=False,   # load without attempting to deserialize/compile saved compile config
@@ -39,20 +33,14 @@ def get_custom_objects():
         "SeparateInputValueHead": SeparateInputValueHead,
         "CombinedPairwiseComparisonValueHead": CombinedInputPairwiseComparisonHead,
         "SeparateInputPairwiseComparisonHead": SeparateInputPairwiseComparisonHead,
-        # "GridValueHead": GridValueHead,
-        # 'CardStateGridValueHead': CardStateGridValueHead,
-        # "EmbeddingValueHead": EmbeddingValueHead,
-        # 'PairwiseComparisonHead': PairwiseComparisonHead,
-        # 'CardStatePairwiseComparisonHead': CardStatePairwiseComparisonHead,
-        # "HandCategoryHead": HandCategoryHead,
-        # "CardStateHandCategoryHead": CardStateHandCategoryHead,
         # "WeightedCategoricalCrossentropy": WeightedCategoricalCrossentropy,
         # 'SuitPermutationLayer': SuitPermutationLayer,
     }
 
-def train_embeddings(config=None, mode_config=None):
+def train_embeddings(config=None, mode_config=None, return_info=False):
     """Handles model creation, data, compilation, and training."""
     mode = config["mode"]
+    start_time = time.time()
     metrics = None
     
     # --- Data ---
@@ -60,9 +48,9 @@ def train_embeddings(config=None, mode_config=None):
     gen_kwargs = mode_config.get("generator_kwargs", {})
     train_gen = gen_cls(config, **gen_kwargs)
 
-    output_adapter = mode_config.get("output_adapter", {})
-    adapter = build_output_adapter(output_adapter)
-    train_gen = AdaptedGenerator(train_gen, adapter)
+    # output_adapter = mode_config.get("output_adapter", {})
+    # adapter = build_output_adapter(output_adapter)
+    # train_gen = AdaptedGenerator(train_gen, adapter)
 
     # --- Paths ---
     save_dir = config["save_directory"]
@@ -75,31 +63,60 @@ def train_embeddings(config=None, mode_config=None):
     # --- Model creation or load ---
     if config["load_head_model"]:
         print(f"🔄 Loading model from {model_path}")
-        model = load_model(model_path)
+        base_model = load_model(model_path)
     else:
         print("🧱 Building new model...") 
-        # build_function_cls = mode_config["build_function"]
-        # build_function_kwargs = training_mode_config.get("build_function_kwargs", {})
-        # model = build_function_cls(config)
-        model = build_model(config, mode_config)
+        base_model = build_model(config, mode_config)
 
     if config["load_encoder_model"]:
-        # load_all_encoders_into_model(model, hand_encoder_path, board_encoder_path, combined_encoder_path, shared_encoder_path)
-        load_encoder(model, encoder_path)
+        load_encoder(base_model, encoder_path)
+
+    # ✅ WRAP WITH DUAL OPTIMIZER (only if enabled in config)
+    use_dual_optimizer = config.get("use_dual_optimizer", False)
+    if use_dual_optimizer:
+        encoder_lr = float(config.get("encoder_lr", config.get("encoder_lr", 1e-4)))
+        head_lr = float(config.get("head_lr", mode_config.get("learning_rate", 1e-3)))
+    else:
+        # Single optimizer uses head_lr if provided, otherwise mode_config LR
+        head_lr = float(config.get("head_lr", mode_config.get("learning_rate", 1e-3)))
+        encoder_lr = None
+
+    if use_dual_optimizer:
+        print(f"\n🔧 Using dual optimizer:")
+        print(f"  Encoder LR: {encoder_lr}")
+        print(f"  Head LR: {head_lr}")
+        
+        model = DualOptimizerModel(base_model, encoder_lr=encoder_lr, head_lr=head_lr)
+    else:
+        model = base_model
+        optimizer = tf.keras.optimizers.Adam(learning_rate=head_lr)
 
     # --- Compile ---
     loss_cfg = mode_config["loss_function"]
     loss = loss_cfg(config) if callable(loss_cfg) else loss_cfg
     loss_weights = mode_config["loss_weights"]
-    lr = mode_config["learning_rate"]
+    # lr = mode_config["learning_rate"]
     metrics = mode_config.get("metrics", None)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-    # include metrics if set
-    if metrics is not None:
-        model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights, metrics=metrics)
+    if use_dual_optimizer:
+        # DualOptimizerModel handles optimizers internally
+        if metrics is not None:
+            model.compile(loss=loss, loss_weights=loss_weights, metrics=metrics)
+        else:
+            model.compile(loss=loss, loss_weights=loss_weights)
     else:
-        model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights)
+        # Single optimizer (original behavior)
+        if metrics is not None:
+            model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights, metrics=metrics)
+        else:
+            model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights)
+            
+    # optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+    # # include metrics if set
+    # if metrics is not None:
+    #     model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights, metrics=metrics)
+    # else:
+    #     model.compile(optimizer=optimizer, loss=loss, loss_weights=loss_weights)
 
     # ✅ Add verbose=1 to ReduceLROnPlateau to see when it triggers
     reduce_cfg = config["reduce_lr"]
@@ -152,9 +169,7 @@ def train_embeddings(config=None, mode_config=None):
     model.summary()
 
     print("\n=== ENCODER SUMMARY ===")
-    # Print summary for each encoder inside PokerComboModel
     enc = find_encoder(model)
-    # enc = get_encoder_from_model(model)
 
     if enc is not None:
         dummy = tf.zeros((1, 14, 4, 1))
@@ -171,7 +186,7 @@ def train_embeddings(config=None, mode_config=None):
     val_config["is_validation"] = True  # ✅ Flag as validation mode
     
     val_gen = gen_cls(val_config)
-    val_gen = AdaptedGenerator(val_gen, adapter)
+    # val_gen = AdaptedGenerator(val_gen, adapter)
 
     # ✅ Pre-load ONE large validation batch from database
     print("📊 Pre-loading validation batch...")
@@ -185,20 +200,40 @@ def train_embeddings(config=None, mode_config=None):
     print(f"✅ Validation y shape: {val_gen._preloaded_y.shape}")
 
     # --- Train ---
-    model.fit(
+    history = model.fit(
         train_gen,
         validation_data=val_gen,
-        epochs=config["epochs"],
+        epochs=mode_config.get("default_epochs", config.get("epochs", 20)),
         steps_per_epoch=config["steps_per_epoch"],
         callbacks=callbacks,
         verbose=1,
     )
 
-    if config["save_model"]:
-        print(f"💾 Saving model to {model_path}")
+    # Support separate saving of head and encoder (scheduler-driven)
+    head_saved = False
+    encoder_saved = False
+    if config.get("save_head_model", True) and config.get("save_model", False):
+        print(f"💾 Saving head model to {model_path}")
         model.save(model_path)
+        head_saved = True
+    if config.get("save_encoder_model", True) and config.get("save_model", False):
         save_encoder(model, encoder_path)
+        encoder_saved = True
+
+    info = {
+        "mode": mode,
+        "submode": config.get("submode"),
+        "model_path": model_path if head_saved else None,
+        "encoder_path": encoder_path if encoder_saved else None,
+        "encoder_lr": encoder_lr,
+        "head_lr": head_lr,
+        "history": getattr(history, "history", None),
+        "start_time": start_time,
+        "end_time": time.time(),
+    }
     
+    if return_info:
+        return model, info
     return model
 
 def get_encoder_from_model(model):

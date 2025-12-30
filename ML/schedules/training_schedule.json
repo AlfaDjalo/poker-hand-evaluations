@@ -1,0 +1,26 @@
+[
+  {
+    "mode": "hand_category",
+    "submode": "combined",
+    "load_encoder_model": true,
+    "load_head_model": true,
+    "save_encoder_model": false,
+    "save_head_model": true,
+    "use_dual_optimizer": false,
+    "epochs": 5,
+    "head_lr": 1e-3,
+    "encoder_lr": 1e-4
+  },
+  {
+    "mode": "hand_category",
+    "submode": "separate",
+    "load_encoder_model": true,
+    "load_head_model": false,
+    "save_encoder_model": false,
+    "save_head_model": true,
+    "use_dual_optimizer": true,
+    "epochs": 5,
+    "head_lr": 1e-3,
+    "encoder_lr": 1e-4
+  }
+]

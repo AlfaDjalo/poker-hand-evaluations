@@ -13,7 +13,6 @@ from config import get_config, summarize_config
 from mode_config import get_mode_config
 
 from training.trainer import train_embeddings
-from ML.data.generators import AdaptedGenerator, build_output_adapter
 
 
 def main():
@@ -39,9 +38,9 @@ def main():
     gen_kwargs = mode_config.get("generator_kwargs", {})
     eval_gen = gen_cls(validation_config, **gen_kwargs)
 
-    output_adapter = mode_config.get("output_adapter", {})
-    adapter = build_output_adapter(output_adapter)
-    eval_gen = AdaptedGenerator(eval_gen, adapter)
+    # output_adapter = mode_config.get("output_adapter", {})
+    # adapter = build_output_adapter(output_adapter)
+    # eval_gen = AdaptedGenerator(eval_gen, adapter)
 
     eval_gen.preload_validation_data()   
     evaluate_cls = mode_config["evaluation_function"]

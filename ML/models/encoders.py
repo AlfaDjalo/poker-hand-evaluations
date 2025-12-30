@@ -4,16 +4,65 @@ import numpy as np
 from tensorflow.keras import layers, Model
 from keras.saving import register_keras_serializable
 
-# Encoder Model
+"""
+Encoders for poker card states represented as rank × suit grids.
+
+This module defines neural encoders that map structured card grids
+(e.g. hand-only, board-only, or combined states) into fixed-dimensional
+L2-normalized embedding vectors suitable for:
+
+- classification heads
+- metric learning / contrastive losses
+- pairwise comparison models
+- downstream aggregation (e.g. hand + board → combo)
+
+Design principles:
+- Preserve rank ordering semantics via progressive 1D convolutions
+- Fully mix suit information early while avoiding suit-specific bias
+- Produce normalized embeddings to stabilize similarity-based objectives
+- Keep input semantics (e.g. suit permutation, augmentation) outside
+  the encoder itself
+"""
+
 @register_keras_serializable(package="Poker")
 class CardSetEncoder(Model):
+    """
+    Neural encoder for a single card set represented as a rank × suit grid.
+
+    The encoder maps an input tensor of shape `(ranks, suits, channels)`
+    (typically `(14, 4, C)` with duplicated Ace rank) into a fixed-size,
+    L2-normalized embedding vector.
+
+    Architectural overview:
+    - 2D convolution to jointly mix suit information and local rank context
+    - Reshape into a rank-sequential representation
+    - Progressive 1D convolutions to model rank adjacency and ordering
+    - Dense projection into an embedding space
+    - L2 normalization for metric stability
+
+    This encoder is intentionally agnostic to:
+    - the semantic meaning of channels
+    - whether the card set represents a hand, board, or other subset
+    - suit permutation or other symmetry enforcement (handled upstream)
+
+    Args:
+        config (dict):
+            Configuration dictionary containing:
+            - "encoder_input_shape": Expected input shape (e.g. (14, 4, C))
+            - "embedding_dim": Dimensionality of the output embedding
+
+    Outputs:
+        Tensor of shape `(batch_size, embedding_dim)`, L2-normalized.
+    """
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        
+        # Expected input shape (rank × suit × channels).
+        # Typically ranks=14 to support Ace duplication for wheel straights.        
         self.encoder_input_shape = config["encoder_input_shape"]  # ideally (14,4,C)
         self.embedding_dim = config["embedding_dim"]
 
-        # First layer: full suit mixing + local rank mixing
+        # First stage: jointly mix suits and local rank patterns.
+        # Kernel spans all suits (width=4) and 2 adjacent ranks.
         self.conv2d = layers.Conv2D(
             filters=32,
             kernel_size=(2,4),
@@ -22,11 +71,11 @@ class CardSetEncoder(Model):
         )
         self.bn2d = layers.BatchNormalization()
         
-        # After conv2d, reshape to (batch, ranks-1, filters)
+        # After Conv2D, collapse suit dimension and treat ranks as a sequence.
+        # This enables rank-progressive 1D convolutions.        
         self.reshape = layers.Reshape((13, 32))
         # self.reshape = layers.Reshape((-1, 32))
         
-        # Rank-progressive 1D layers
         self.conv1 = layers.Conv1D(48, kernel_size=2, padding="valid", activation="relu")
         self.bn1 = layers.BatchNormalization()
 
@@ -36,17 +85,28 @@ class CardSetEncoder(Model):
         self.conv3 = layers.Conv1D(96, kernel_size=2, padding="valid", activation="relu")
         self.bn3 = layers.BatchNormalization()
 
-        # Dense projection to embedding
         self.flatten = layers.Flatten()
         self.d1 = layers.Dense(256, activation="relu")
         self.d2 = layers.Dense(64, activation="relu")
         self.embedding = layers.Dense(self.embedding_dim, activation=None)
 
-        # L2 normalisation
+        # L2 normalization stabilizes similarity-based objectives
+        # (e.g. cosine similarity, contrastive loss, pairwise heads).
         self.l2_norm = layers.Lambda(lambda t: tf.nn.l2_normalize(t, axis=-1))
 
     def call(self, x, training=False):
+        """
+        Forward pass for a single card set.
 
+        Args:
+            x: Tensor of shape `(batch, ranks, suits, channels)`.
+            training (bool): Whether the call is in training mode
+                (affects batch normalization).
+
+        Returns:
+            L2-normalized embedding tensor of shape
+            `(batch, embedding_dim)`.
+        """
         x = self.conv2d(x)
         x = self.bn2d(x, training=training)
 
@@ -71,12 +131,16 @@ class CardSetEncoder(Model):
         return x
 
     def get_config(self):
+        """
+        Returns the configuration needed to serialize this encoder.
+
+        The returned config is sufficient to fully reconstruct the encoder
+        architecture and embedding dimensionality.
+        """
         base = super().get_config()
         base.update({
             "config": {
                 "input_shape_encoder": self.encoder_input_shape,
-                # "filters": self.filters,
-                # "kernel_size": self.kernel_size,
                 "embedding_dim": self.embedding_dim,
             }
         })
@@ -91,32 +155,53 @@ class CardSetEncoder(Model):
         return cls(cfg, **config)
 
 
-# @register_keras_serializable(package="Poker")
-# class SuitPermutationLayer(tf.keras.layers.Layer):
-#     def __init__(self, **kwargs):
-#         super().__init__(**kwargs)
-#         self.perms = list(itertools.permutations(range(4)))
-
-#     def call(self, inputs):
-#         # inputs: (batch, 13, 4, channels)
-#         permuted = []
-#         for perm in self.perms:
-#             permuted.append(tf.gather(inputs, indices=list(perm), axis=2))
-#         # Stack on new axis for permutations
-#         return tf.stack(permuted, axis=1) # shape: (batch, 24, 13, 4, channels)
-    
-#     def get_config(self):
-#         return super().get_config()
-
-
 @register_keras_serializable(package="Poker")
 class CardStateEncoder(tf.keras.Model):
+    """
+    Wrapper encoder that applies a shared CardSetEncoder to one or more inputs.
+
+    This class enables flexible handling of different input modes:
+    - single card set (e.g. hand-only)
+    - multiple card sets (e.g. [hand, board])
+    - paired inputs (e.g. A vs B comparisons)
+
+    Each input tensor is encoded independently using the same
+    underlying CardSetEncoder instance, ensuring weight sharing
+    and consistent embedding geometry.
+
+    Args:
+        config (dict):
+            Global or encoder-specific configuration. Only the
+            fields relevant to the CardSetEncoder are extracted.
+
+    Inputs:
+        Either:
+        - a single tensor `(batch, ranks, suits, channels)`, or
+        - a list/tuple of such tensors
+
+    Outputs:
+        A list of embedding tensors, one per input, each of shape
+        `(batch, embedding_dim)`.
+    """
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self._encoder_config = dict(get_encoder_config(config)) if isinstance(config, dict) else dict(config)
         self.card_set_encoder = CardSetEncoder(self._encoder_config)
 
     def call(self, inputs, training=False):
+        """
+        Encode one or more card-state tensors using a shared encoder.
+
+        Args:
+            inputs:
+                A tensor or a list/tuple of tensors, each representing
+                a card set grid.
+            training (bool):
+                Whether the call is in training mode.
+
+        Returns:
+            List of L2-normalized embedding tensors, preserving input order.
+        """
         if not isinstance(inputs, (list, tuple)):
             inputs = [inputs]
 
@@ -136,11 +221,22 @@ class CardStateEncoder(tf.keras.Model):
 
 
 def get_encoder_config(global_config):
+    """
+    Extract the subset of global configuration relevant to the card encoder.
+
+    This function acts as a boundary between higher-level model configuration
+    (e.g. training modes, heads, losses) and the encoder architecture itself.
+
+    Args:
+        global_config (dict):
+            Global experiment or model configuration.
+
+    Returns:
+        dict:
+            Configuration dictionary suitable for initializing
+            a CardSetEncoder.
+    """
     return {
         "encoder_input_shape": global_config["encoder_input_shape"],
-        # "filters": global_config["filters"],
-        # "kernel_size": global_config["kernel_size"],
         "embedding_dim": global_config["embedding_dim"],
-        # "use_equivariance": global_config["use_equivariance"],
-        # "use_shared_encoder": global_config.get("use_shared_encoder", False),
     }

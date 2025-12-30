@@ -88,181 +88,85 @@ def evaluate_pairwise_comparison(model, data, num_examples=20):
     for i in range(n):
         print(f"{i+1:02d}: Pred={y_pred[i]:.3f}  |  Actual={int(y_true[i])}")
 
-    return
+    # Build result dict
+    examples = []
+    n = min(num_examples, len(y_pred[0]))
+    for i in range(n):
+        examples.append({
+            "p0": float(y_pred[0][i]), "a0": int(y_eval[0][i]),
+            "p1": float(y_pred[1][i]), "a1": int(y_eval[1][i]),
+            "p2": float(y_pred[2][i]), "a2": int(y_eval[2][i]),
+        })
 
-
-# def evaluate_pairwise_comparison(model, data, num_examples=20):
-#     """
-#     Evaluate value model performance and print predictions vs actual.
-#     Accepts an iterator (e.g. iter(eval_gen)) or a generator/sequence iterator.
-#     """
-#     # Collect enough examples across batches
-#     x_batches, y_batches = _collect_batches(data, num_examples)
-
-#     # Run predictions per batch and concatenate
-#     preds_list = []
-#     trues_list = []
-#     for x_batch, y_batch in zip(x_batches, y_batches):
-#         y_pred_batch = model.predict(x_batch)
-#         # If model returned a single array (common for factory pairwise/value heads),
-#         # replicate it into 3 heads so subsequent code can treat all cases uniformly.
-#         if not isinstance(y_pred_batch, (list, tuple)):
-#             y_pred_batch = (y_pred_batch, y_pred_batch, y_pred_batch)
-#         else:
-#             y_pred_batch = tuple(y_pred_batch)
-
-#         # Normalize y_batch similarly: allow single y or 3-tuple y
-#         if isinstance(y_batch, tuple):
-#             y_true_batch = tuple(y_batch)
-#         else:
-#             y_true_batch = (y_batch, y_batch, y_batch)
-#         preds_list.append(y_pred_batch)
-#         trues_list.append(y_true_batch)
-
-#     # concatenate per-head arrays
-#     # Ensure each predicted head is an ndarray of shape (N, 1) for concatenation
-#     # y_pred = tuple(np.concatenate([np.asarray(p[i]) for p in preds_list], axis=0) for i in range(3))
-#     # y_eval = tuple(np.concatenate([np.asarray(t[i]) for t in trues_list], axis=0) for i in range(3))
-
-#     # # Ensure numpy arrays
-#     # y_pred = tuple(np.asarray(a) for a in y_pred)
-#     # y_eval = tuple(np.asarray(a) for a in y_eval)
-
-#     # Validate per-head shapes and compute per-head BCE
-#     # bce_fn = tf.keras.losses.BinaryCrossentropy()
-#     # bce_per_head = []
-#     # for i in range(3):
-#     #     if y_eval[i].shape != y_pred[i].shape:
-#     #         raise ValueError(
-#     #             f"Shape mismatch for head {i}: y_true.shape={y_eval[i].shape}, y_pred.shape={y_pred[i].shape}"
-#     #         )
-#     #     bce_per_head.append(float(bce_fn(y_eval[i], y_pred[i]).numpy().item()))
-
-#     # bce = float(np.mean(bce_per_head))
-
-#     # Accuracy for each head (safe against shape issues)
-#     # acc = np.mean([
-#     #     np.mean((y_pred[i].squeeze() > 0.5) == (y_eval[i].squeeze() > 0.5))
-#     #     for i in range(3)
-#     # ])
-
-#     print("\n==============================")
-#     print("🔍 Showing example predictions")
-#     print("==============================")
-
-#     # print("\n📊 Pairwise Evaluation Results:")
-#     # print(f"  BCE Loss (avg across heads): {bce:.6f}")
-#     # print(f"  Accuracy (all heads): {acc:.4f}")
-
-#     # Combo-only metrics (head index 2)
-#     # bce_combo = bce_per_head[2]
-#     # acc_combo = float(np.mean((y_pred[2].squeeze() > 0.5) == (y_eval[2].squeeze() > 0.5)))
-
-#     print(f"\n  BCE Loss (combo): {bce_combo:.6f}")
-#     print(f"  Accuracy (combo): {acc_combo:.4f}")
-
-#     # ---- Example predictions ----
-#     # print("\n🔎 Example predictions (all 3 outputs):")
-#     # n = min(num_examples, len(y_pred[0]))
-
-#     # for i in range(n):
-#     #     p0 = float(y_pred[0][i])
-#     #     a0 = int(y_eval[0][i])
-
-#     #     p1 = float(y_pred[1][i])
-#     #     a1 = int(y_eval[1][i])
-
-#     #     p2 = float(y_pred[2][i])
-#     #     a2 = int(y_eval[2][i])
-
-#     #     print(f"{i+1:02d}: "
-#     #             f"p0={p0:.3f}/{a0}   "
-#     #             f"p1={p1:.3f}/{a1}   "
-#     #             f"p2={p2:.3f}/{a2}")
-
-#     print("\n🔎 Example predictions (combo head):")
-#     for i in range(n):
-#         p = float(y_pred[2][i])
-#         a = int(y_eval[2][i])
-#         print(f"{i+1:02d}: Pred={p:.3f}  |  Actual={a}")
-
-#     return
+    return {
+        "bce": float(bce),
+        "accuracy": float(acc),
+        "bce_combo": float(bce_combo),
+        "acc_combo": float(acc_combo),
+        "n_examples": n,
+        "examples": examples,
+    }
 
 
 def evaluate_grid_value(model, data, num_examples=20):
     """
-    Evaluate model performance and print predictions vs actual.
+    Evaluate grid_value model which outputs separate tensors for each head.
 
     Args:
         model: trained model
         data: data generator
-        model_type: 'absolute' or 'pairwise'
         num_examples: how many prediction examples to print
     """
-    # Collect enough examples across batches
-    x_batches, y_batches = _collect_batches(data, num_examples)
+    x_eval, y_eval = next(data)
+    y_pred = model.predict(x_eval)
 
-    preds_list = []
-    trues_list = []
-    for x_batch, y_batch in zip(x_batches, y_batches):
-        y_pred_batch = model.predict(x_batch)
-        # if model outputs a single tensor (value model), treat directly
-        if isinstance(y_pred_batch, (list, tuple)):
-            y_pred_batch = tuple(y_pred_batch)
-        else:
-            y_pred_batch = (y_pred_batch,)
-
-        # Normalize y_batch shape: for value mode generator returns y tensor
-        if isinstance(y_batch, tuple):
-            y_true_batch = tuple(y_batch)
-        else:
-            y_true_batch = (y_batch,)
-
-        preds_list.append(y_pred_batch)
-        trues_list.append(y_true_batch)
-
-    # If model had multiple outputs concatenate appropriately
-    # support both single-output (embedding_value) and 3-output (value heads)
-    num_heads = len(preds_list[0])
-    y_pred = tuple(np.concatenate([p[i] for p in preds_list], axis=0) for i in range(num_heads))
-    y_eval = tuple(np.concatenate([t[i] for t in trues_list], axis=0) for i in range(num_heads))
-
-    # Use first head to compute regression metrics and example display if multiple heads exist
+    # y_eval and y_pred are single tensors, not tuples
     mse = tf.keras.losses.MeanSquaredError()(y_eval, y_pred).numpy().item()
     mae = tf.keras.losses.MeanAbsoluteError()(y_eval, y_pred).numpy().item()
-    corr = np.corrcoef(np.array(y_eval[0]).squeeze(), np.array(y_pred[0]).squeeze())[0, 1]
+
+    corr = np.corrcoef(
+        np.array(y_eval).squeeze(),
+        np.array(y_pred).squeeze()
+    )[0, 1]
 
     print("\n📊 Absolute Value Evaluation Results:")
     print(f"  MSE (all): {mse:.6f}")
     print(f"  MAE (all): {mae:.6f}")
     print(f"  Corr (all): {corr:.4f}")
 
-    # ---- Undo your normalization ----
+    # Undo normalization function
     def denorm(x):
         return x * 7461.0 + 1.0
 
     print("\n🔎 Example predictions (value head):")
-    n = min(num_examples, len(y_pred[0]))
-
-    y_pred_main = y_pred[0].squeeze()
-    y_eval_main = y_eval[0].squeeze()
+    n = min(num_examples, len(y_pred))
+    y_pred_main = y_pred.squeeze()
+    y_eval_main = y_eval.squeeze()
 
     for i in range(n):
         pred_val = denorm(float(y_pred_main[i]))
         actual_val = denorm(float(y_eval_main[i]))
         print(f"{i+1:02d}: Pred={pred_val:.1f}  |  Actual={actual_val:.1f}")
 
-    # If there are multiple heads (e.g. combo) show second/third as needed
-    if len(y_pred) > 1:
-        print("\n🔎 Example predictions (combo head):")
-        y_pred_combo = y_pred[-1].squeeze()
-        y_eval_combo = y_eval[-1].squeeze()
-        for i in range(n):
-            pred_val = denorm(float(y_pred_combo[i]))
-            actual_val = denorm(float(y_eval_combo[i]))
-            print(f"{i+1:02d}: Pred={pred_val:.1f}  |  Actual={actual_val:.1f}")
+    # Build result dict
+    examples = []
+    n = min(num_examples, len(y_pred[0]))
+    for i in range(n):
+        examples.append({
+            "pred_main": float(y_pred[0].squeeze()[i]),
+            "actual_main": float(y_eval[0].squeeze()[i]),
+            "pred_combo": float(y_pred[-1].squeeze()[i]) if len(y_pred) > 1 else None,
+            "actual_combo": float(y_eval[-1].squeeze()[i]) if len(y_eval) > 1 else None,
+        })
 
-    return
+    return {
+        "mse": float(mse),
+        "mae": float(mae),
+        "corr": float(corr),
+        "n_examples": n,
+        "examples": examples,
+    }
+
 
 def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
     """
@@ -308,8 +212,8 @@ def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
     accuracy = np.mean(argmax_arr(y_pred) == argmax_arr(y_true))
 
     print("\n📊 Hand Category Evaluation Results:")
-    print(f"  Categorical Crossentropy Loss: {total_loss:.6f}")
-    print(f"  Accuracy: {accuracy:.4f}")
+    print(f"  Categorical CE Loss (avg heads): {total_loss:.6f}")
+    print(f"  Accuracy (all heads): {accuracy:.4f}")
 
     # ---- Confusion matrix ----
     if full_confusion:
@@ -343,98 +247,28 @@ def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
             pct = " ".join(f"{cm_norm[i, j] * 100:5.1f}%" for j in range(n_classes))
             print(f"{i:2d}: {counts}   | {pct}")
 
-    return
+    # small examples (predicted class, true class)
+    n = min(num_examples, y_eval[2].shape[0])
+    examples = []
+    for i in range(n):
+        examples.append({
+            "pred_class": int(argmax_arr(y_pred[2])[i]),
+            "true_class": int(argmax_arr(y_eval[2])[i])
+        })
 
-
-def evaluate_hand_category_old(model, data, num_examples=20, full_confusion=False):
-    """
-    Evaluate model performance and print predictions vs actual.
-
-    Args:
-        model: trained model
-        data: data generator
-        model_type: 'absolute' or 'pairwise'
-        num_examples: how many prediction examples to print
-    """
-    # Collect enough examples across batches
-    x_batches, y_batches = _collect_batches(data, num_examples)
-
-    preds_list = []
-    trues_list = []
-    for x_batch, y_batch in zip(x_batches, y_batches):
-        y_pred_batch = model.predict(x_batch)
-        y_pred_batch = tuple(y_pred_batch)
-        if isinstance(y_batch, tuple):
-            y_true_batch = tuple(y_batch)
-        else:
-            y_true_batch = (y_batch, y_batch, y_batch)
-        preds_list.append(y_pred_batch)
-        trues_list.append(y_true_batch)
-
-    y_pred = tuple(np.concatenate([p[i] for p in preds_list], axis=0) for i in range(3))
-    y_eval = tuple(np.concatenate([t[i] for t in trues_list], axis=0) for i in range(3))
-
-    cce = tf.keras.losses.CategoricalCrossentropy()
-    total_loss = np.mean([cce(y_eval[i], y_pred[i]).numpy().item() for i in range(3)])
-
-    def argmax_arr(x):
-        arr = np.array(x)
-        if arr.ndim == 3 and arr.shape[-1] == 1:
-            arr = arr.squeeze(-1)
-        return np.argmax(arr, axis=-1)
-
-    acc = np.mean([np.mean(argmax_arr(y_pred[i]) == argmax_arr(y_eval[i])) for i in range(3)])
-
-    print("\n📊 Hand Category Evaluation Results:")
-    print(f"  Categorical CE Loss (avg heads): {total_loss:.6f}")
-    print(f"  Accuracy (all heads): {acc:.4f}")
-
-    loss_cat = cce(y_eval[2], y_pred[2]).numpy().item()
-    acc_cat = np.mean(argmax_arr(y_pred[2]) == argmax_arr(y_eval[2]))
-
-    print(f"\n  Categorical CE Loss (category head): {loss_cat:.6f}")
-    print(f"  Accuracy (category head): {acc_cat:.4f}")
-
-    # ---- Confusion matrix ----
-    if full_confusion:
-        cm = evaluate_full_confusion(model)
-        print("Full confusion matrix computed:")
-        print(cm)
-        # Optionally normalize and print percentages or other stats here
-        # return cm
-        return
-    else:
-        y_true = argmax_arr(y_eval[2])
-        y_pred_cls = argmax_arr(y_pred[2])
-
-        n_classes = max(y_true.max(), y_pred_cls.max()) + 1
-
-        cm = np.zeros((n_classes, n_classes), dtype=int)
-        for t, p in zip(y_true, y_pred_cls):
-            cm[int(t), int(p)] += 1
-
-        # ✅ FIXED NORMALIZATION
-        row_sums = cm.sum(axis=1, keepdims=True)
-        cm_norm = np.where(
-            row_sums == 0,
-            0.0,
-            cm / row_sums
-        )
-
-        print("\n📈 Confusion Matrix (rows=actual, cols=predicted):")
-        header = "     " + " ".join(f"{i:>5}" for i in range(n_classes))
-        print(header)
-
-        for i in range(n_classes):
-            counts = " ".join(f"{cm[i, j]:5d}" for j in range(n_classes))
-            pct = " ".join(f"{cm_norm[i, j] * 100:5.1f}%" for j in range(n_classes))
-            print(f"{i:2d}: {counts}   | {pct}")
-
-    return
+    # optionally include confusion matrix
+    return {
+        "total_loss": float(total_loss),
+        "accuracy": float(acc),
+        "category_loss": float(loss_cat),
+        "category_accuracy": float(acc_cat),
+        "n_examples": n,
+        "examples": examples,
+        "confusion_matrix": cm.tolist() if not full_confusion else None,
+    }
 
 
 def evaluate_value(model, data, num_examples=20):
-# def evaluate_embedding_value(model, data, num_examples=20):
     """
     Evaluate embedding_value model which outputs a single tensor.
 
@@ -473,6 +307,23 @@ def evaluate_value(model, data, num_examples=20):
         pred_val = denorm(float(y_pred_main[i]))
         actual_val = denorm(float(y_eval_main[i]))
         print(f"{i+1:02d}: Pred={pred_val:.1f}  |  Actual={actual_val:.1f}")
+
+    examples = []
+    n = min(num_examples, len(y_pred))
+    for i in range(n):
+        examples.append({
+            "pred": float(y_pred_main[i]),
+            "actual": float(y_eval_main[i])
+        })
+
+    return {
+        "mse": float(mse),
+        "mae": float(mae),
+        "corr": float(corr),
+        "n_examples": n,
+        "examples": examples,
+    }
+
 
 def evaluate_full_confusion(model, batch_size=4096):
     """
@@ -523,65 +374,6 @@ def evaluate_full_confusion(model, batch_size=4096):
 
     return confusion
 
-
-def evaluate_full_confusion_old(model, batch_size=4096):
-    """
-    Evaluate the model over all 5-card hands, build confusion matrix.
-    Only uses hand and combined outputs.
-    
-    Args:
-        model: your keras model with outputs [hand_v, board_v, combined_v]
-        batch_size: batch size for prediction
-        
-    Returns:
-        confusion_matrix: np.array shape (9,9)
-    """
-    num_classes = 9
-    confusion = np.zeros((num_classes, num_classes), dtype=np.int64)
-
-    # Generate all hands (52 cards, 5 card combos)
-    all_hands = generate_all_5card_hands()
-
-    inputs = []
-    true_classes = []
-
-    for hand in tqdm(all_hands, total=2598960):
-        grid = hand_to_grid(hand)  # (13,4,2)
-        inputs.append(grid)
-        # Get true class for this hand
-        true_class = hand_to_true_class(hand)
-        true_classes.append(true_class)
-
-        # Batch predict when enough accumulated
-        if len(inputs) == batch_size:
-            batch_x = np.stack(inputs)
-            hand_preds, _, combined_preds = model.predict(batch_x, verbose=0)
-            
-            # Predictions are probabilities per class: shape (batch_size, 9)
-            # Get predicted class as argmax
-            hand_pred_classes = np.argmax(hand_preds, axis=1)
-            combined_pred_classes = np.argmax(combined_preds, axis=1)
-            
-            # Option 1: Combine or pick one head - here we just use combined head
-            pred_classes = combined_pred_classes
-            
-            # Update confusion matrix
-            for true_c, pred_c in zip(true_classes, pred_classes):
-                confusion[true_c, pred_c] += 1
-            
-            # Reset batch
-            inputs = []
-            true_classes = []
-
-    # Handle last batch if any
-    if inputs:
-        batch_x = np.stack(inputs)
-        hand_preds, _, combined_preds = model.predict(batch_x, verbose=0)
-        pred_classes = np.argmax(combined_preds, axis=1)
-        for true_c, pred_c in zip(true_classes, pred_classes):
-            confusion[true_c, pred_c] += 1
-
-    return confusion
 
 def generate_all_5card_hands(deck=range(52)):
     # deck is cards 0..51 representing a standard deck
