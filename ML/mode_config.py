@@ -23,11 +23,11 @@ def _hand_category_config():
         # "default_epochs": 30,
         "default_epochs": 5,
         # Use a factory to construct a weighted categorical loss using weights from runtime config
-        "loss_function": lambda cfg: [WeightedCategoricalCrossentropy(cfg["category_class_weights"])],
+        "loss_function": lambda cfg: WeightedCategoricalCrossentropy(cfg["category_class_weights"]),
         "loss_weights": 1.0,
         "metrics": [tf.keras.metrics.CategoricalAccuracy()],
         # "learning_rate": 1e-4,
-        "learning_rate": 1e-3,
+        # "learning_rate": 1e-3,
         "evaluation_function": evaluate_hand_category,
         "evaluation_function_kwargs": {
             # "full_confusion": True
@@ -49,7 +49,7 @@ def _value_config():
         "loss_function": "mse",
         "loss_weights": 1.0,
         "metrics": ["mae"],
-        "learning_rate": 1e-3,
+        # "learning_rate": 1e-3,
         "evaluation_function": evaluate_value,
     }
 
@@ -82,7 +82,7 @@ def _alternating_config():
         "default_epochs": 50,
         "loss_function": [tf.keras.losses.BinaryCrossentropy(from_logits=False)] * 3,
         "loss_weights": [0.3, 0.3, 0.4],
-        "learning_rate": 1e-3,
+        # "learning_rate": 1e-3,
         "evaluation_function": evaluate_pairwise_comparison,
     }
 

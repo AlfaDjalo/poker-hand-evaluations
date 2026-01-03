@@ -1,0 +1,25 @@
+stage:
+  name: "hand_category_bootstrap"
+  cycles: 10
+
+  io:
+    load_encoder: true
+    load_head: false
+    save_encoder: true
+    save_head: true
+
+  defaults:
+    encoder_lr: 1e-4
+    head_lr: 1e-3
+
+  jobs:
+    - name: "category_combined"
+      mode: "hand_category"
+      submode: "combined"
+      epochs: 30
+
+    - name: "category_separate"
+      mode: "hand_category"
+      submode: "separate"
+      epochs: 5
+      reset_head: true

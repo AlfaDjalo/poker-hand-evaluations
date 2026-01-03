@@ -21,18 +21,18 @@ def get_config():
         "submode": "separate",
         
         # ---- Save / Load Models ----
-        "load_encoder_model": True,
-        # "load_head_model": False,
-        "load_head_model": True,
-        "save_model": False,
+        "load_encoder_model": False,
+        "load_head_model": False,
+        # "load_head_model": True,
+        # "save_model": False,
 
         # New: control saving of encoder vs head separately (scheduler uses these)
-        "save_encoder_model": True,
-        "save_head_model": True,
+        "save_encoder_model": False,
+        "save_head_model": False,
 
         # New: schedule files (scheduler will read/write here by default)
         "schedules_directory":               os.path.join(base_dir, "ML", "schedules"),
-        "schedule_file":                     os.path.join(base_dir, "ML", "schedules", "training_schedule.json"),
+        "schedule_file":                     os.path.join(base_dir, "ML", "schedules", "test.yaml"),
         "schedule_output":                   os.path.join(base_dir, "ML", "schedules", "training_schedule_results.json"),
 
         # ---- Database ----
@@ -55,7 +55,6 @@ def get_config():
         # "category_class_weights": [0.2, 0.3, 0.6, 1.0, 2.0, 3.0, 5.0, 8.0, 12.0],
 
         # Dual optimizer settings
-        "use_dual_optimizer": False,
         # "use_dual_optimizer": True,
         "encoder_lr": 1e-4,
 

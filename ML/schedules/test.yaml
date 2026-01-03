@@ -1,0 +1,23 @@
+stage:
+  name: "test_stage"
+  cycles: 2
+  io:
+    load_encoder: true
+    load_head: false
+    save_encoder: true
+    save_head: true
+  defaults:
+    encoder_lr: 0.0001
+    head_lr: 0.001
+  jobs:
+    - name: "hand_category_combined"
+      mode: "hand_category"
+      submode: "combined"
+      epochs: 30
+      full_confusion: true
+    - name: "hand_category_separate"
+      mode: "hand_category"
+      submode: "separate"
+      epochs: 5
+
+

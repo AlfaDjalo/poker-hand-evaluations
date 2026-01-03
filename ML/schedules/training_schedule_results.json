@@ -2,78 +2,137 @@
   "results": [
     {
       "job": {
+        "name": "hand_category_combined",
         "mode": "hand_category",
         "submode": "combined",
-        "load_encoder_model": true,
-        "load_head_model": true,
-        "save_encoder_model": false,
-        "save_head_model": true,
-        "use_dual_optimizer": false,
-        "epochs": 5,
-        "head_lr": 0.001,
-        "encoder_lr": 0.0001
+        "epochs": 30,
+        "full_confusion": true
       },
-      "start_time": 1767069737.8381557,
-      "end_time": 1767070077.3728092,
-      "duration_seconds": 339.5346534252167,
+      "cycle": 1,
+      "start_time": 1767350876.6266046,
+      "end_time": 1767352690.5523622,
+      "duration_seconds": 1813.9257576465607,
       "model_path": null,
-      "encoder_path": null,
-      "encoder_lr": null,
+      "encoder_path": "C:\\Users\\David\\Projects\\distribution_of_poker_hands\\models\\saved\\encoder_model.keras",
+      "encoder_lr": 0.0001,
       "head_lr": 0.001,
-      "evaluation": null,
+      "summary": {
+        "best_val_loss": 0.011,
+        "final_val_loss": 0.0129,
+        "best_loss": 0.0,
+        "final_loss": 0.0,
+        "accuracy": 100.0,
+        "total_loss": 0.0148
+      },
       "history_keys": [
         "categorical_accuracy",
+        "encoder_lr",
+        "head_lr",
         "loss",
-        "val_categorical_accuracy",
-        "val_loss",
-        "learning_rate"
+        "val_loss"
       ],
       "success": true,
-      "message": null,
-      "summary": {
-        "best_val_loss": 0.13864722847938538,
-        "final_val_loss": 0.16460026800632477,
-        "best_loss": 1.2767040061589796e-05,
-        "final_loss": 0.0001291253138333559,
-        "best_val_categorical_accuracy": 0.9865000247955322,
-        "final_val_categorical_accuracy": 0.984375
-      }
+      "message": null
     },
     {
       "job": {
+        "name": "hand_category_separate",
         "mode": "hand_category",
         "submode": "separate",
-        "load_encoder_model": true,
-        "load_head_model": false,
-        "save_encoder_model": false,
-        "save_head_model": true,
-        "use_dual_optimizer": true,
-        "epochs": 5,
-        "head_lr": 0.001,
-        "encoder_lr": 0.0001
+        "epochs": 5
       },
-      "start_time": 1767070329.7412534,
-      "end_time": 1767070724.2613072,
-      "duration_seconds": 394.5200538635254,
+      "cycle": 1,
+      "start_time": 1767352741.9564908,
+      "end_time": 1767354253.4161446,
+      "duration_seconds": 1511.4596538543701,
       "model_path": null,
-      "encoder_path": null,
+      "encoder_path": "C:\\Users\\David\\Projects\\distribution_of_poker_hands\\models\\saved\\encoder_model.keras",
       "encoder_lr": 0.0001,
       "head_lr": 0.001,
-      "evaluation": null,
+      "summary": {
+        "best_val_loss": 0.2931,
+        "final_val_loss": 0.2931,
+        "best_loss": 0.2872,
+        "final_loss": 0.3444,
+        "accuracy": 67.19,
+        "total_loss": 1.1777
+      },
       "history_keys": [
         "categorical_accuracy",
+        "encoder_lr",
+        "head_lr",
         "loss",
-        "val_loss",
-        "learning_rate"
+        "val_loss"
       ],
       "success": true,
-      "message": null,
+      "message": null
+    },
+    {
+      "job": {
+        "name": "hand_category_combined",
+        "mode": "hand_category",
+        "submode": "combined",
+        "epochs": 30,
+        "full_confusion": true
+      },
+      "cycle": 2,
+      "start_time": 1767354296.1447554,
+      "end_time": 1767356303.5843358,
+      "duration_seconds": 2007.4395804405212,
+      "model_path": null,
+      "encoder_path": "C:\\Users\\David\\Projects\\distribution_of_poker_hands\\models\\saved\\encoder_model.keras",
+      "encoder_lr": 0.0001,
+      "head_lr": 0.001,
       "summary": {
-        "best_val_loss": 0.0,
-        "final_val_loss": 0.0,
+        "best_val_loss": 0.3664,
+        "final_val_loss": 0.4813,
         "best_loss": 0.0,
-        "final_loss": 0.0
-      }
+        "final_loss": 0.0,
+        "accuracy": 100.0,
+        "total_loss": 0.0026
+      },
+      "history_keys": [
+        "categorical_accuracy",
+        "encoder_lr",
+        "head_lr",
+        "loss",
+        "val_loss"
+      ],
+      "success": true,
+      "message": null
+    },
+    {
+      "job": {
+        "name": "hand_category_separate",
+        "mode": "hand_category",
+        "submode": "separate",
+        "epochs": 5
+      },
+      "cycle": 2,
+      "start_time": 1767356340.3303452,
+      "end_time": 1767357204.8975437,
+      "duration_seconds": 864.5671985149384,
+      "model_path": null,
+      "encoder_path": "C:\\Users\\David\\Projects\\distribution_of_poker_hands\\models\\saved\\encoder_model.keras",
+      "encoder_lr": 0.0001,
+      "head_lr": 0.001,
+      "summary": {
+        "best_val_loss": 0.3423,
+        "final_val_loss": 0.3458,
+        "best_loss": 0.2621,
+        "final_loss": 0.3132,
+        "accuracy": 57.81,
+        "total_loss": 1.2577
+      },
+      "history_keys": [
+        "categorical_accuracy",
+        "encoder_lr",
+        "head_lr",
+        "loss",
+        "val_loss"
+      ],
+      "success": true,
+      "message": null
     }
   ]
 }

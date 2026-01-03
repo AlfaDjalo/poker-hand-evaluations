@@ -32,7 +32,7 @@ def _collect_batches(data_iter, num_examples):
     return x_acc, y_acc
 
 
-def evaluate_pairwise_comparison(model, data, num_examples=20):
+def evaluate_pairwise_comparison(model, data, num_examples=10):
     """
     Evaluate pairwise comparison model performance and print example predictions.
 
@@ -89,86 +89,23 @@ def evaluate_pairwise_comparison(model, data, num_examples=20):
         print(f"{i+1:02d}: Pred={y_pred[i]:.3f}  |  Actual={int(y_true[i])}")
 
     # Build result dict
-    examples = []
-    n = min(num_examples, len(y_pred[0]))
-    for i in range(n):
-        examples.append({
-            "p0": float(y_pred[0][i]), "a0": int(y_eval[0][i]),
-            "p1": float(y_pred[1][i]), "a1": int(y_eval[1][i]),
-            "p2": float(y_pred[2][i]), "a2": int(y_eval[2][i]),
-        })
+    # examples = []
+    # n = min(num_examples, len(y_pred[0]))
+    # for i in range(n):
+    #     examples.append({
+    #         # "p0": float(y_pred[0][i]), "a0": int(y_eval[0][i]),
+    #         # "p1": float(y_pred[1][i]), "a1": int(y_eval[1][i]),
+    #         # "p2": float(y_pred[2][i]), "a2": int(y_eval[2][i]),
+    #     })
 
     return {
-        "bce": float(bce),
-        "accuracy": float(acc),
-        "bce_combo": float(bce_combo),
-        "acc_combo": float(acc_combo),
+        "bce_loss": float(bce_loss),
+        "accuracy": float(accuracy),
         "n_examples": n,
-        "examples": examples,
+        # "examples": examples,
     }
 
-
-def evaluate_grid_value(model, data, num_examples=20):
-    """
-    Evaluate grid_value model which outputs separate tensors for each head.
-
-    Args:
-        model: trained model
-        data: data generator
-        num_examples: how many prediction examples to print
-    """
-    x_eval, y_eval = next(data)
-    y_pred = model.predict(x_eval)
-
-    # y_eval and y_pred are single tensors, not tuples
-    mse = tf.keras.losses.MeanSquaredError()(y_eval, y_pred).numpy().item()
-    mae = tf.keras.losses.MeanAbsoluteError()(y_eval, y_pred).numpy().item()
-
-    corr = np.corrcoef(
-        np.array(y_eval).squeeze(),
-        np.array(y_pred).squeeze()
-    )[0, 1]
-
-    print("\n📊 Absolute Value Evaluation Results:")
-    print(f"  MSE (all): {mse:.6f}")
-    print(f"  MAE (all): {mae:.6f}")
-    print(f"  Corr (all): {corr:.4f}")
-
-    # Undo normalization function
-    def denorm(x):
-        return x * 7461.0 + 1.0
-
-    print("\n🔎 Example predictions (value head):")
-    n = min(num_examples, len(y_pred))
-    y_pred_main = y_pred.squeeze()
-    y_eval_main = y_eval.squeeze()
-
-    for i in range(n):
-        pred_val = denorm(float(y_pred_main[i]))
-        actual_val = denorm(float(y_eval_main[i]))
-        print(f"{i+1:02d}: Pred={pred_val:.1f}  |  Actual={actual_val:.1f}")
-
-    # Build result dict
-    examples = []
-    n = min(num_examples, len(y_pred[0]))
-    for i in range(n):
-        examples.append({
-            "pred_main": float(y_pred[0].squeeze()[i]),
-            "actual_main": float(y_eval[0].squeeze()[i]),
-            "pred_combo": float(y_pred[-1].squeeze()[i]) if len(y_pred) > 1 else None,
-            "actual_combo": float(y_eval[-1].squeeze()[i]) if len(y_eval) > 1 else None,
-        })
-
-    return {
-        "mse": float(mse),
-        "mae": float(mae),
-        "corr": float(corr),
-        "n_examples": n,
-        "examples": examples,
-    }
-
-
-def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
+def evaluate_hand_category(model, data, num_examples=10, full_confusion=False):
     """
     Evaluate hand category model performance and print predictions vs actual.
 
@@ -220,7 +157,7 @@ def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
         cm = evaluate_full_confusion(model)
         print("Full confusion matrix computed:")
         print(cm)
-        return
+        # return
     else:
         y_true_cls = argmax_arr(y_true)
         y_pred_cls = argmax_arr(y_pred)
@@ -232,10 +169,13 @@ def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
             cm[int(t), int(p)] += 1
 
         row_sums = cm.sum(axis=1, keepdims=True)
-        cm_norm = np.where(
-            row_sums == 0,
-            0.0,
-            cm / row_sums
+
+        cm_norm = np.zeros_like(cm, dtype=float)
+        np.divide(
+            cm,
+            row_sums,
+            out=cm_norm,
+            where=row_sums != 0
         )
 
         print("\n📈 Confusion Matrix (rows=actual, cols=predicted):")
@@ -248,27 +188,26 @@ def evaluate_hand_category(model, data, num_examples=20, full_confusion=False):
             print(f"{i:2d}: {counts}   | {pct}")
 
     # small examples (predicted class, true class)
-    n = min(num_examples, y_eval[2].shape[0])
+    n = min(num_examples, y_true.shape[0])
     examples = []
     for i in range(n):
         examples.append({
-            "pred_class": int(argmax_arr(y_pred[2])[i]),
-            "true_class": int(argmax_arr(y_eval[2])[i])
+            "pred_class": int(argmax_arr(y_pred)[i]),
+            "true_class": int(argmax_arr(y_true)[i])
         })
 
     # optionally include confusion matrix
     return {
         "total_loss": float(total_loss),
-        "accuracy": float(acc),
-        "category_loss": float(loss_cat),
-        "category_accuracy": float(acc_cat),
+        "accuracy": float(accuracy),
+        # "total_loss": float(total_loss),
         "n_examples": n,
         "examples": examples,
         "confusion_matrix": cm.tolist() if not full_confusion else None,
     }
 
 
-def evaluate_value(model, data, num_examples=20):
+def evaluate_value(model, data, num_examples=10):
     """
     Evaluate embedding_value model which outputs a single tensor.
 
@@ -277,17 +216,40 @@ def evaluate_value(model, data, num_examples=20):
         data: data generator
         num_examples: how many prediction examples to print
     """
-    x_eval, y_eval = next(data)
-    y_pred = model.predict(x_eval)
+    x_batches, y_batches = _collect_batches(data, num_examples)
+
+    preds_list = []
+    trues_list = []
+    for x_batch, y_batch in zip(x_batches, y_batches):
+        y_pred_batch = model.predict(x_batch)
+
+        # If output is a list/tuple with single element, unwrap it
+        if isinstance(y_pred_batch, (list, tuple)) and len(y_pred_batch) == 1:
+            y_pred_batch = y_pred_batch[0]
+
+        preds_list.append(np.asarray(y_pred_batch))
+        trues_list.append(np.asarray(y_batch))
+
+    # Concatenate all predictions and labels
+    y_pred = np.concatenate(preds_list, axis=0)
+    y_true = np.concatenate(trues_list, axis=0)
+
+    y_pred = y_pred.reshape(-1)
+    y_true = y_true.reshape(-1)
 
     # y_eval and y_pred are single tensors, not tuples
-    mse = tf.keras.losses.MeanSquaredError()(y_eval, y_pred).numpy().item()
-    mae = tf.keras.losses.MeanAbsoluteError()(y_eval, y_pred).numpy().item()
+    mse = tf.keras.losses.MeanSquaredError()(y_true, y_pred).numpy().item()
+    mae = tf.keras.losses.MeanAbsoluteError()(y_true, y_pred).numpy().item()
 
-    corr = np.corrcoef(
-        np.array(y_eval).squeeze(),
-        np.array(y_pred).squeeze()
-    )[0, 1]
+    if np.std(y_true) == 0 or np.std(y_pred) == 0:
+        corr = 0.0
+    else:
+        corr = float(np.corrcoef(y_true, y_pred)[0, 1])
+
+    # corr = np.corrcoef(
+    #     np.array(y_true).squeeze(),
+    #     np.array(y_pred).squeeze()
+    # )[0, 1]
 
     print("\n📊 Embedding Value Evaluation Results:")
     print(f"  MSE: {mse:.6f}")
@@ -295,25 +257,25 @@ def evaluate_value(model, data, num_examples=20):
     print(f"  Corr: {corr:.4f}")
 
     # Undo normalization function
-    def denorm(x):
-        return x * 7461.0 + 1.0
+    # def denorm(x):
+    #     return x * 7461.0 + 1.0
 
     print("\n🔎 Example predictions (value head):")
     n = min(num_examples, len(y_pred))
-    y_pred_main = y_pred.squeeze()
-    y_eval_main = y_eval.squeeze()
+    # y_pred_main = y_pred.squeeze()
+    # y_true_main = y_true.squeeze()
 
     for i in range(n):
-        pred_val = denorm(float(y_pred_main[i]))
-        actual_val = denorm(float(y_eval_main[i]))
+        pred_val = denorm(float(y_pred[i]))
+        actual_val = denorm(float(y_true[i]))
         print(f"{i+1:02d}: Pred={pred_val:.1f}  |  Actual={actual_val:.1f}")
 
     examples = []
     n = min(num_examples, len(y_pred))
     for i in range(n):
         examples.append({
-            "pred": float(y_pred_main[i]),
-            "actual": float(y_eval_main[i])
+            "pred": float(y_pred[i]),
+            "actual": float(y_true[i])
         })
 
     return {
@@ -475,3 +437,6 @@ def hand_to_true_class(hand):
     if counts[0] == 2:
         return 7  # One Pair
     return 8      # No Pair (High Card)
+
+def denorm(x):
+    return x * 7461.0 + 1.0

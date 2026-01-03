@@ -1,4 +1,5 @@
 import os, sys
+import logging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend")))
@@ -14,6 +15,8 @@ from pydantic import BaseModel
 import tensorflow as tf
 import numpy as np
 import os
+
+logger = logging.getLogger("backend.routes")
 
 # Request schema
 class HandRequest(BaseModel):
@@ -67,31 +70,30 @@ def setup_api_routes(app):
             JSON object with key `equities` mapping to a list of floats (one per
             player) or an `error` string if the call failed.
         """
-        print("In evaluate API")
+        logger.debug("In evaluate API")
         try:
-            print(req.playerHands)
-            print(req.board)
+            logger.debug("playerHands=%s board=%s", req.playerHands, req.board)
 
             player_hands = prepare_player_hands(req.playerHands)
             board = [normalize_card(c) for c in (req.board or []) if c and c.strip()]
 
-            print("Filtered player hands:", player_hands)
-            print("Filtered board:", board)
+            logger.debug("Filtered player hands: %s", player_hands)
+            logger.debug("Filtered board: %s", board)
 
             # compute_equity now returns a dict with keys: 'equities', 'wins', 'ties', 'total_hands', 'exact'
             result = compute_calc(player_hands, board, debug=True)
             
             # For debugging, you can log the full result
-            print("Full result:", result)
-            print(f"Total hands evaluated: {result.get('total_hands')}")
-            print(f"Wins: {result.get('wins')}")
-            print(f"Ties: {result.get('ties')}")
+            logger.debug("Full result: %s", result)
+            logger.info(f"Total hands evaluated: {result.get('total_hands')}")
+            logger.info(f"Wins: {result.get('wins')}")
+            logger.info(f"Ties: {result.get('ties')}")
 
             # Return only equities to the API client
             return {"equities": result['equities']}
 
         except Exception as e:
-            print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             return {"error": str(e)}
         
     @app.post("/showdown")
@@ -107,23 +109,22 @@ def setup_api_routes(app):
         Returns:
             JSON object with key `equities` or `error` on failure.
         """
-        print("In showdown API")
+        logger.debug("In showdown API")
         try:
-            print(req.playerHands)
-            print(req.board)
+            logger.debug("playerHands=%s board=%s", req.playerHands, req.board)
 
             player_hands = prepare_player_hands(req.playerHands)
             board = [normalize_card(c) for c in (req.board or []) if c and c.strip()]
 
-            print("Filtered player hands:", player_hands)
-            print("Filtered board:", board)
+            logger.debug("Filtered player hands: %s", player_hands)
+            logger.debug("Filtered board: %s", board)
 
             result = compute_calc(player_hands, board, debug=True)
 
             return {"equities": result['equities']}
 
         except Exception as e:
-            print(f"Error: {e}")
+            logger.error(f"Error: {e}")
             return {"error": str(e)}
             
 
@@ -134,9 +135,7 @@ def setup_api_routes(app):
         """
 
         try:
-            print("\n=== Embeddings Request ===")
-            print("Requested mode:", req.mode)
-            print("Hands:", req.embeddingHands)
+            logger.debug("Embeddings request mode=%s hands=%s", req.mode, req.embeddingHands)
 
             # ------------------------
             # 1. Validate mode
@@ -173,7 +172,7 @@ def setup_api_routes(app):
             if not os.path.exists(encoder_path):
                 return {"error": f"Encoder file not found: {encoder_path}"}
 
-            print(f"Loading {mode} encoder from: {encoder_path}")
+            logger.info(f"Loading {mode} encoder from: {encoder_path}")
 
             # ------------------------
             # 3. Load only this encoder
@@ -198,7 +197,7 @@ def setup_api_routes(app):
                 return {"error": "No valid hands provided"}
 
             batch = tf.stack(tensors)
-            print("Batch:", batch.shape)
+            logger.debug("Batch shape: %s", batch.shape)
 
             # ------------------------
             # 5. Run encoder
@@ -209,7 +208,7 @@ def setup_api_routes(app):
                 else:
                     out = encoder(batch, training=False)
             except Exception as e:
-                print("Encoder error:", e)
+                logger.error("Encoder error: %s", e)
                 return {"error": f"Encoder run failed: {e}"}
 
             # ------------------------
@@ -220,7 +219,7 @@ def setup_api_routes(app):
             except Exception:
                 embeddings = out[0].tolist()
 
-            print(f"Generated {len(embeddings)} {mode} embeddings")
+            logger.info("Generated %d %s embeddings", len(embeddings), mode)
 
             return {"embeddings": embeddings}
 
