@@ -32,7 +32,8 @@ def get_config():
 
         # New: schedule files (scheduler will read/write here by default)
         "schedules_directory":               os.path.join(base_dir, "ML", "schedules"),
-        "schedule_file":                     os.path.join(base_dir, "ML", "schedules", "test.yaml"),
+        # "schedule_file":                     os.path.join(base_dir, "ML", "schedules", "test.yaml"),
+        "schedule_file":                     os.path.join(base_dir, "ML", "schedules", "all_tasks.yaml"),
         "schedule_output":                   os.path.join(base_dir, "ML", "schedules", "training_schedule_results.json"),
 
         # ---- Database ----

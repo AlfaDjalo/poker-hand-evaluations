@@ -69,23 +69,14 @@ def load_model(path):
         try:
             custom = get_custom_objects()
             m = tf.keras.models.load_model(path, custom_objects=custom, compile=False, safe_mode=False)
-            # If we got a DualOptimizerModel wrapper, try to unwrap to its base_model.
-            if isinstance(m, DualOptimizerModel):
-                base = getattr(m, "base_model", None)
-                # If base was reconstructed but has no weights/layers, warn and fail with helpful message.
-                if base is None or len(getattr(base, "weights", [])) == 0:
-                    raise RuntimeError(
-                        "Saved model appears to be a DualOptimizerModel wrapper whose nested base_model "
-                        "couldn't be reconstructed; weights can't be restored. To fix:\n"
-                        "  1) In an environment that can deserialize the original wrapper, run:\n"
-                        "       m = tf.keras.models.load_model('<path>', custom_objects={'DualOptimizerModel': DualOptimizerModel}, compile=False)\n"
-                        "       m.base_model.save('<path>')\n"
-                        "     This will overwrite the file with the underlying base_model (recommended).\n"
-                        "  2) Or run trainer.migrate_dual_to_base('<path>') if you have access to the same code that originally saved it.\n"
-                        "After migrating the saved file to contain the base model only, retry loading."
-                    )
-                # Otherwise return the unwrapped base model
-                return base
+            # if isinstance(m, DualOptimizerModel) and getattr(m, "base_model", None) is not None:
+            #     base = m.base_model
+            #     try:
+            #         base.save(path)  # rewrite saved file as base_model only to avoid future errors
+            #         print("🔧 Migrated saved DualOptimizerModel -> base_model (overwrote file)")
+            #     except Exception as e:
+            #         print("⚠️ Migration save failed:", e)
+            #     return base
             return m
         except Exception as fallback_exc:
             # Combine errors for diagnostics
@@ -455,25 +446,5 @@ def load_encoder(model, encoder_path):
         layer.trainable = True
 
     print("✅ Shared encoder weights loaded successfully.")
-
-def migrate_dual_to_base(path: str, out_path: str = None, overwrite: bool = False):
-	"""Attempt to load a DualOptimizerModel wrapper and save its base_model to disk.
-
-	Notes:
-	- This requires that the saved file can be deserialized into a DualOptimizerModel
-	  (i.e. the environment contains compatible class definitions).
-	- If overwrite=True and migration succeeds, the original file will be replaced.
-	"""
-	custom = get_custom_objects()
-	custom["DualOptimizerModel"] = DualOptimizerModel
-	m = tf.keras.models.load_model(path, custom_objects=custom, compile=False, safe_mode=False)
-
-	if not isinstance(m, DualOptimizerModel) or getattr(m, "base_model", None) is None:
-		raise RuntimeError("Loaded object is not a DualOptimizerModel with a base_model; cannot migrate.")
-
-	base = m.base_model
-	out_path = out_path or (path if overwrite else f"{path}.base.keras")
-	base.save(out_path)
-	return out_path
 
 

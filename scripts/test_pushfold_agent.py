@@ -51,7 +51,6 @@ def run_test(num_episodes=1000, deterministic=False):
 
         sb_reward_total += reward
 
-
         # while not done:
         #     action = select_action(policy, obs, deterministic)
         #     obs, reward, done, info = env.step(action)

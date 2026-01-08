@@ -1,22 +1,179 @@
 {
-  "stage_name": "test_stage",
-  "total_cycles": 2,
+  "stage_name": "hand_category_bootstrap",
+  "total_cycles": 1,
   "jobs": [
-    "hand_category_combined",
-    "hand_category_separate"
+    "category_separate",
+    "value_separate",
+    "pairwise_separate",
+    "pairwise_combined",
+    "value_combined",
+    "hand_category_combined"
   ],
-  "results_count": 4,
+  "results_count": 6,
   "summary_per_job": {
-    "hand_category_combined": {
+    "category_separate": {
       "best_val_loss": {
-        "min": 0.011,
-        "max": 0.3664,
-        "mean": 0.1887
+        "min": 0.2923,
+        "max": 0.2923,
+        "mean": 0.2923
       },
       "final_val_loss": {
-        "min": 0.0129,
-        "max": 0.4813,
-        "mean": 0.24710000000000001
+        "min": 0.3087,
+        "max": 0.3087,
+        "mean": 0.3087
+      },
+      "best_loss": {
+        "min": 0.2031,
+        "max": 0.2031,
+        "mean": 0.2031
+      },
+      "final_loss": {
+        "min": 0.3034,
+        "max": 0.3034,
+        "mean": 0.3034
+      },
+      "accuracy": {
+        "min": 50.0,
+        "max": 50.0,
+        "mean": 50.0
+      },
+      "total_loss": {
+        "min": 0.9446,
+        "max": 0.9446,
+        "mean": 0.9446
+      }
+    },
+    "value_separate": {
+      "best_val_loss": {
+        "min": 0.0255,
+        "max": 0.0255,
+        "mean": 0.0255
+      },
+      "final_val_loss": {
+        "min": 0.0264,
+        "max": 0.0264,
+        "mean": 0.0264
+      },
+      "best_loss": {
+        "min": 0.0168,
+        "max": 0.0168,
+        "mean": 0.0168
+      },
+      "final_loss": {
+        "min": 0.029,
+        "max": 0.029,
+        "mean": 0.029
+      },
+      "mse": {
+        "min": 0.0236,
+        "max": 0.0236,
+        "mean": 0.0236
+      },
+      "mae": {
+        "min": 0.1322,
+        "max": 0.1322,
+        "mean": 0.1322
+      },
+      "corr": {
+        "min": 0.6812,
+        "max": 0.6812,
+        "mean": 0.6812
+      }
+    },
+    "pairwise_separate": {
+      "best_val_loss": {
+        "min": 0.4256,
+        "max": 0.4256,
+        "mean": 0.4256
+      },
+      "final_val_loss": {
+        "min": 0.7497,
+        "max": 0.7497,
+        "mean": 0.7497
+      },
+      "best_loss": {
+        "min": 0.0016,
+        "max": 0.0016,
+        "mean": 0.0016
+      },
+      "final_loss": {
+        "min": 0.0016,
+        "max": 0.0016,
+        "mean": 0.0016
+      },
+      "best_val_binary_crossentropy_loss": {
+        "min": 0.8583,
+        "max": 0.8583,
+        "mean": 0.8583
+      },
+      "final_val_binary_crossentropy_loss": {
+        "min": 0.7497,
+        "max": 0.7497,
+        "mean": 0.7497
+      },
+      "accuracy": {
+        "min": 67.19,
+        "max": 67.19,
+        "mean": 67.19
+      },
+      "bce_loss": {
+        "min": 1.1359,
+        "max": 1.1359,
+        "mean": 1.1359
+      }
+    },
+    "pairwise_combined": {
+      "best_val_loss": {
+        "min": 0.9578,
+        "max": 0.9578,
+        "mean": 0.9578
+      },
+      "final_val_loss": {
+        "min": 0.9912,
+        "max": 0.9912,
+        "mean": 0.9912
+      },
+      "best_loss": {
+        "min": 0.0001,
+        "max": 0.0001,
+        "mean": 0.0001
+      },
+      "final_loss": {
+        "min": 0.0016,
+        "max": 0.0016,
+        "mean": 0.0016
+      },
+      "best_val_binary_crossentropy_loss": {
+        "min": 0.9994,
+        "max": 0.9994,
+        "mean": 0.9994
+      },
+      "final_val_binary_crossentropy_loss": {
+        "min": 0.9912,
+        "max": 0.9912,
+        "mean": 0.9912
+      },
+      "accuracy": {
+        "min": 100.0,
+        "max": 100.0,
+        "mean": 100.0
+      },
+      "bce_loss": {
+        "min": 0.0006,
+        "max": 0.0006,
+        "mean": 0.0006
+      }
+    },
+    "value_combined": {
+      "best_val_loss": {
+        "min": 0.0002,
+        "max": 0.0002,
+        "mean": 0.0002
+      },
+      "final_val_loss": {
+        "min": 0.0003,
+        "max": 0.0003,
+        "mean": 0.0003
       },
       "best_loss": {
         "min": 0.0,
@@ -27,6 +184,43 @@
         "min": 0.0,
         "max": 0.0,
         "mean": 0.0
+      },
+      "mse": {
+        "min": 0.0095,
+        "max": 0.0095,
+        "mean": 0.0095
+      },
+      "mae": {
+        "min": 0.0253,
+        "max": 0.0253,
+        "mean": 0.0253
+      },
+      "corr": {
+        "min": 0.8982,
+        "max": 0.8982,
+        "mean": 0.8982
+      }
+    },
+    "hand_category_combined": {
+      "best_val_loss": {
+        "min": 0.0004,
+        "max": 0.0004,
+        "mean": 0.0004
+      },
+      "final_val_loss": {
+        "min": 0.0005,
+        "max": 0.0005,
+        "mean": 0.0005
+      },
+      "best_loss": {
+        "min": 0.0001,
+        "max": 0.0001,
+        "mean": 0.0001
+      },
+      "final_loss": {
+        "min": 0.0001,
+        "max": 0.0001,
+        "mean": 0.0001
       },
       "accuracy": {
         "min": 100.0,
@@ -34,41 +228,9 @@
         "mean": 100.0
       },
       "total_loss": {
-        "min": 0.0026,
-        "max": 0.0148,
-        "mean": 0.0087
-      }
-    },
-    "hand_category_separate": {
-      "best_val_loss": {
-        "min": 0.2931,
-        "max": 0.3423,
-        "mean": 0.3177
-      },
-      "final_val_loss": {
-        "min": 0.2931,
-        "max": 0.3458,
-        "mean": 0.31945
-      },
-      "best_loss": {
-        "min": 0.2621,
-        "max": 0.2872,
-        "mean": 0.27465
-      },
-      "final_loss": {
-        "min": 0.3132,
-        "max": 0.3444,
-        "mean": 0.3288
-      },
-      "accuracy": {
-        "min": 57.81,
-        "max": 67.19,
-        "mean": 62.5
-      },
-      "total_loss": {
-        "min": 1.1777,
-        "max": 1.2577,
-        "mean": 1.2177
+        "min": 0.0003,
+        "max": 0.0003,
+        "mean": 0.0003
       }
     }
   }

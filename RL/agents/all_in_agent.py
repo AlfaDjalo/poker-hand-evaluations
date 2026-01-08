@@ -9,7 +9,8 @@ BB = 1
 
 class AllInAgent(BaseAgent):
     def act(self, observation):
-        if observation["position"] == SB:
-            return ALL_IN
-        else:
-            return ALL_IN
+        return ALL_IN
+        # if observation["position"] == SB:
+        #     return ALL_IN
+        # else:
+        #     return ALL_IN

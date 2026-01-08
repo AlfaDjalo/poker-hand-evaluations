@@ -40,21 +40,22 @@ sb_policy = tf.keras.models.load_model(
     compile=False
 )
 
-bb_policy = tf.keras.models.load_model(
-    BB_POLICY_PATH,
-    custom_objects={"PushFoldPolicy": PushFoldPolicy},
-    compile=False
-)
+# bb_policy = tf.keras.models.load_model(
+#     BB_POLICY_PATH,
+#     custom_objects={"PushFoldPolicy": PushFoldPolicy},
+#     compile=False
+# )
 
+# ---------- Create Agents ----------
 sb_agent = PushFoldAgent(
     policy=sb_policy,
     training=False
 )
 
-bb_agent = PushFoldAgent(
-    policy=bb_policy,
-    training=False
-)
+# bb_agent = PushFoldAgent(
+#     policy=bb_policy,
+#     training=False
+# )
 
 # ---------- Hand utilities ----------
 def all_starting_hand_combos(rank1, rank2, suited):
@@ -75,10 +76,8 @@ def all_starting_hand_combos(rank1, rank2, suited):
     return cards
 
 
-def policy_prob_for_hand(hand, position):
+def policy_prob_for_hand(hand, position, mode="probs"):
     obs = {
-        "hand": hand,
-        "position": position,
         "embedding": encoder(
             tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
             training=False
@@ -86,11 +85,71 @@ def policy_prob_for_hand(hand, position):
     }
 
     if position == 0:
+        agent = sb_agent
+    else:
+        agent = bb_agent
+
+    if mode == "probs":
+        probs = agent.policy_probs(obs["embedding"])[0]
+        return_val = float(probs[ACTION_ALLIN])
+    else:
+        return_val = agent.policy_values(obs["embedding"])[0]
+
+    # if position == 0:
+    #     probs = mode_function(obs["embedding"])[0]
+    #     # probs = sb_agent.policy_probs(obs["embedding"])[0]
+    # else:
+    #     # probs = bb_agent.policy_probs(obs["embedding"])[0]
+    # print(return_val)
+    return return_val
+    # return float(probs[ACTION_ALLIN])
+
+# def policy_prob_for_hand(hand, position):
+#     obs = {
+#         "embedding": encoder(
+#             tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
+#             training=False
+#         )[0].numpy()
+#     }
+
+#     if position == 0:
+#         out = sb_agent.policy(
+#             tf.expand_dims(obs["embedding"], axis=0),
+#             training=False
+#         )
+#     else:
+#         out = bb_agent.policy(
+#             tf.expand_dims(obs["embedding"], axis=0),
+#             training=False
+#         )
+
+#     logits = out["logits"]
+#     probs = tf.nn.softmax(logits, axis=-1).numpy()[0][0]
+#     print("Probs: ", probs)
+
+#     return float(probs[ACTION_ALLIN])
+
+
+def policy_prob_for_hand_old(hand, position):
+    obs = {
+        "hand": hand,
+        # "position": position,
+        "embedding": encoder(
+            tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
+            training=False
+        )[0].numpy()
+    }
+
+    # Use the full action-probability array (shape (2,)), do not take [0] here.
+    if position == 0:
         probs = sb_agent.action_probs(obs)[0]
     else:
         probs = bb_agent.action_probs(obs)[0]
 
-    return probs[ACTION_ALLIN]
+    # Sanity check: expect two actions (fold, all-in)
+    assert hasattr(probs, "__len__") and len(probs) == 2, f"Expected probs length 2, got {probs}"
+
+    return float(probs[ACTION_ALLIN])
 
 
 # def policy_prob_for_hand(hand, position):
@@ -105,7 +164,7 @@ def policy_prob_for_hand(hand, position):
 
 
 # ---------- Grid generation ----------
-def generate_policy_grid(position):
+def generate_policy_grid(position, mode="probs"):
     grid = np.zeros((13, 13), dtype=np.float32)
 
     for i, r1 in enumerate(RANKS):
@@ -117,7 +176,7 @@ def generate_policy_grid(position):
             else:
                 combos = all_starting_hand_combos(r1, r2, suited=False)
 
-            probs = [policy_prob_for_hand(hand, position) for hand in combos]
+            probs = [policy_prob_for_hand(hand, position, mode) for hand in combos]
             grid[i, j] = np.mean(probs)
 
     return grid
@@ -141,19 +200,20 @@ def plot_heatmap(grid, title, filename):
 # ---------- Main ----------
 if __name__ == "__main__":
     print("Generating SB push grid...")
-    sb_grid = generate_policy_grid(position=0)
+    # sb_grid = generate_policy_grid(position=0, mode="values")
+    sb_grid = generate_policy_grid(position=0, mode="probs")
     plot_heatmap(
         sb_grid,
         "SB Push Probability",
         "sb_push_policy_heatmap.png"
     )
 
-    print("Generating BB call grid...")
-    bb_grid = generate_policy_grid(position=1)
-    plot_heatmap(
-        bb_grid,
-        "BB Call Probability",
-        "bb_call_policy_heatmap.png"
-    )
+    # print("Generating BB call grid...")
+    # bb_grid = generate_policy_grid(position=1)
+    # plot_heatmap(
+    #     bb_grid,
+    #     "BB Call Probability",
+    #     "bb_call_policy_heatmap.png"
+    # )
 
     print("Heatmaps saved to RL/analysis/")

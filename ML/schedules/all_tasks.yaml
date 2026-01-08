@@ -1,6 +1,6 @@
 stage:
   name: "hand_category_bootstrap"
-  cycles: 3
+  cycles: 1
 
   io:
     load_encoder: true
@@ -13,28 +13,27 @@ stage:
     head_lr: 1e-3
 
   jobs:
-    - name: "category_combined"
-      mode: "hand_category"
-      submode: "combined"
-      epochs: 15
     - name: "category_separate"
       mode: "hand_category"
       submode: "separate"
-      epochs: 5
-      reset_head: true
-    - name: "hand_category_combined"
-      mode: "hand_category"
-      submode: "combined"
-      epochs: 15
-    - name: "value_combined"
-      mode: "value"
-      submode: "combined"
-      epochs: 5
-    - name: "hand_category_combined"
-      mode: "hand_category"
-      submode: "combined"
-      epochs: 15
+      epochs: 20
     - name: "value_separate"
       mode: "value"
       submode: "separate"
+      epochs: 35
+    - name: "pairwise_separate"
+      mode: "alternating"
+      submode: "separate"
+      epochs: 30
+    - name: "pairwise_combined"
+      mode: "alternating"
+      submode: "combined"
+      epochs: 20
+    - name: "value_combined"
+      mode: "value"
+      submode: "combined"
+      epochs: 10
+    - name: "hand_category_combined"
+      mode: "hand_category"
+      submode: "combined"
       epochs: 5

@@ -24,6 +24,17 @@ ext_modules = [
         "../OMPEval/omp/HandEvaluator.cpp"],
         include_dirs=["../OMPEval/omp"],
         extra_compile_args=["/O2"],
+    ),
+    Pybind11Extension(
+        "holdem_wrapper",
+        ["holdem_wrapper.cpp",
+        "holdem_equity.cpp",
+        "../OMPEval/omp/CardRange.cpp",
+        "../OMPEval/omp/CombinedRange.cpp",
+        "../OMPEval/omp/EquityCalculator.cpp",
+        "../OMPEval/omp/HandEvaluator.cpp"],
+        include_dirs=["../OMPEval/omp"],
+        extra_compile_args=["/O2"],
     )
 ]
 
@@ -32,6 +43,3 @@ setup(
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
 )
-
-
-

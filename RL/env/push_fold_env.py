@@ -2,8 +2,20 @@ import random
 import tensorflow as tf
 import numpy as np
 from typing import List, Dict, Optional
+
+# import os, sys
+
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend")))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "ML")))
+
+
 from RL.evaluators.treys_eval import evaluate_hand
+
 from ML.training.trainer import get_custom_objects
+
+# from bindings.equity_wrapper import compute_equity as compute_calc
+from bindings.holdem_wrapper import evaluate_showdown as cpp_evaluate_showdown
 
 from pathlib import Path
 
@@ -11,13 +23,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 encoder_path = PROJECT_ROOT / "models" / "saved" / "encoder_model.keras"
 
 class PushFoldEnv:
+    """
+    Push-fold Environment.
+    """
     ACTION_FOLD = 0
     ACTION_ALLIN = 1
 
     POS_SB = 0
     POS_BB = 1
 
-    def __init__(self, config):
+    def __init__(self, config: Dict):
+        """
+        Initialization of push fold class
+        
+        Parameters
+        ----------
+        config
+            Environment configuration parameters, including:
+            - sb (float): Small blind in bb
+            - bb (float): Big blind in bb
+            - stack (float): Effective stack in bb
+            - allow_variable_stack (bool): Flag to allow variable stacks, currently unused.
+        """
         self.sb_bb = config.get("sb", 0.5)
         self.bb_bb = config.get("bb", 1.0)
         self.stack_bb = config.get("stack_bb", 10)  # fixed stack for now
@@ -29,6 +56,7 @@ class PushFoldEnv:
         # Internal state placeholders
         self.deck = []
         self.stacks = [0.0, 0.0]
+        self.committed = [0.0, 0.0]
         self.pot = 0.0
         self.hands = [None, None]
         self.active_player = None
@@ -37,11 +65,11 @@ class PushFoldEnv:
         self.showdown_occurred = False
 
         self.encoder = tf.keras.models.load_model(encoder_path, custom_objects=get_custom_objects(), compile=False)
-        self.encoder.summary()
-        self.embedding_mode = "hand"
+        # self.encoder.summary()
+        # self.embedding_mode = "hand"
 
     def _get_embedding(self, hand_cards):
-        tensor_input = cards_to_tensor(hand_cards, self.embedding_mode)
+        tensor_input = cards_to_tensor(hand_cards, mode="hand")
         tensor_batch = tf.expand_dims(tensor_input, axis=0)
         embedding = self.encoder(tensor_batch, training=False)[0].numpy()
         return embedding.flatten()
@@ -51,14 +79,34 @@ class PushFoldEnv:
            "hand": self.hands[self.active_player].copy(),
            "stack_bb": self.stacks[self.active_player],
            "pot_bb": self.pot,
-           "sb_bb": self.sb_bb,
-           "bb_bb": self.bb_bb,
+        #    "sb_bb": self.sb_bb,
+        #    "bb_bb": self.bb_bb,
            "position": self.active_player,
            "embedding": self._get_embedding(self.hands[self.active_player]),
         }
         return obs
 
     def reset(self, seed=None):
+        """
+        Reset episode, resetting all environment variables
+
+        Parameters
+        ----------
+        seed
+            Seed for random number generator
+
+        Returns
+        -------
+        dict
+            Output from _get_obs() function containing:
+            - hand (list of str): Hand of active player
+            - stack_bb (float): Stack in BB
+            - pot_bb (float): Pot in BB
+            - sb_bb (float): Small blind in BB
+            - bb_bb (float): Big blind in BB
+            - position (int): Position of active player (SB:0, BB:1)
+            - embedding (list of float): Embedding of the hand
+        """
         if seed is not None:
             self.rng.seed(seed)
         else:
@@ -93,10 +141,27 @@ class PushFoldEnv:
         # Deal hands (2 cards each)
         self.hands[self.POS_SB] = [self.deck.pop(), self.deck.pop()]
         self.hands[self.POS_BB] = [self.deck.pop(), self.deck.pop()]
-
+        # print("Hands: ", self.hands)
         return self._get_obs()
 
     def step(self, action):
+        """
+        Step in enviroment.
+
+        Parameters
+        ----------
+        action
+            Action of active player
+
+        Returns
+        -------
+        tuple
+            Output from active player step function containing:
+            - obs:
+            - reward:
+            - done:
+            - info:
+        """
         if self.done:
             raise RuntimeError("step() called after episode is done; call reset() first")
 
@@ -110,15 +175,35 @@ class PushFoldEnv:
             return self._step_p2(action)
 
     def _step_p1(self, action):
+        """
+        Step in enviroment for player 1 action.
+
+        Parameters
+        ----------
+        action
+            Action of active player
+
+        Returns
+        -------
+        tuple
+            Containing:
+            - obs: Observation of environment from _get_obs()
+            - reward: Reward to active player from episode
+            - done: Episode complete flag set to True at showdown or player folding
+            - info: Information regarding completion of episode
+        """
         if action == self.ACTION_FOLD:
             # P1 folds immediately
-            reward = -self.sb_bb
+            sb_reward = -self.sb_bb
+            bb_reward = self.sb_bb
             self.done = True
             self.terminal_reason = "P1_fold"
             self.winner = self.POS_BB
             info = self._make_info()
+            info['sb_reward'] = sb_reward
+            info['bb_reward'] = bb_reward
 
-            return None, reward, self.done, info
+            return None, sb_reward, self.done, info
 
         elif action == self.ACTION_ALLIN:
             # P1 pushes entire stack (all-in)
@@ -132,24 +217,48 @@ class PushFoldEnv:
             self.active_player = self.POS_BB
             reward = 0.0
             info = self._make_info()
+            info['sb_reward'] = 0.0  # No reward yet for SB
+            info['bb_reward'] = 0.0            
             return self._get_obs(), reward, self.done, info
 
     def _step_p2(self, action):
+        """
+        Step in enviroment for player 2 action.
+
+        Parameters
+        ----------
+        action
+            Action of active player
+
+        Returns
+        -------
+        tuple
+            Containing:
+            - obs: Observation of environment from _get_obs()
+            - reward: Reward to active player from episode
+            - done: Episode complete flag set to True at showdown or player folding
+            - info: Information regarding completion of episode
+        """
         if action == self.ACTION_FOLD:
             # P2 folds after P1 shove
             # When player folds:
-            reward = -self.committed[self.active_player]
+            sb_reward = self.bb_bb  # SB wins the pot (BB's big blind)
+            bb_reward = -self.bb_bb
+            # reward = -self.committed[self.active_player]
             self.done = True
             self.terminal_reason = "P2_fold"
             self.winner = self.POS_SB
             info = self._make_info()
+            info['sb_reward'] = sb_reward
+            info['bb_reward'] = bb_reward
 
-            return None, reward, self.done, info
+            return None, bb_reward, self.done, info
 
         elif action == self.ACTION_ALLIN:
             # P2 calls all-in
             call_amount = self.stacks[self.POS_BB]
             self.pot += call_amount
+            self.committed[self.POS_BB] += call_amount
             self.stacks[self.POS_BB] = 0.0
 
             # Showdown needed
@@ -157,50 +266,96 @@ class PushFoldEnv:
             self.terminal_reason = "showdown"
             self.showdown_occurred = True
 
-            reward = self._resolve_showdown()
+            sb_reward, bb_reward = self._resolve_showdown()
             info = self._make_info()
+            info['sb_reward'] = sb_reward
+            info['bb_reward'] = bb_reward
 
-            return None, reward, self.done, info
+            return None, bb_reward, self.done, info
 
     def _resolve_showdown(self):
+        """
+        Resolve showdown when SB action = Push and BB action = Call
+        """
+        board = [self.deck.pop() for _ in range(5)]
+        
+        # Use C++ evaluator - returns 0 if SB wins, 1 if BB wins
+        winner_index = cpp_evaluate_showdown(
+            self.hands[self.POS_SB],
+            self.hands[self.POS_BB],
+            board,
+            debug=False
+        )
+        
+        self.winner = winner_index
+
+        if self.winner == self.POS_SB:
+            sb_reward = self.pot - self.committed[self.POS_SB]
+            bb_reward = -self.committed[self.POS_BB]
+        else:
+            sb_reward = -self.committed[self.POS_SB]
+            bb_reward = self.pot - self.committed[self.POS_BB]
+
+        self.stacks[self.POS_SB] = 0        
+        self.stacks[self.POS_BB] = 0        
+        self.stacks[self.winner] = self.pot
+
+        return sb_reward, bb_reward
+
+
+    def _resolve_showdown_old(self):
+        """
+        Resolve showdown when SB action = Push and BB action = Call
+
+        Parameters
+        ----------
+        Nil
+
+        Returns
+        -------
+        reward
+            
+        """
         # Placeholder showdown logic:
         # Randomly pick a winner (0 or 1)
         board = [self.deck.pop() for _ in range(5)]
-
+        # print("Board: ", board)
         SB_hand_rank = evaluate_hand(self.hands[self.POS_SB], board)
         BB_hand_rank = evaluate_hand(self.hands[self.POS_BB], board)
+        # winner = evaluate_showdown(sb_hand, bb_hand, board)
 
         self.winner = self.POS_SB if SB_hand_rank < BB_hand_rank else self.POS_BB
 
-        # print("SB Hand: ", self.hands[self.POS_SB], board, " Rank: ", SB_hand_rank)
-        # print("BB Hand: ", self.hands[self.POS_BB], board, " Rank: ", BB_hand_rank)
-
-        # winner = self.rng.choice([self.POS_SB, self.POS_BB])
-        # self.winner = winner
-
-        # Acting player is P2 here, so reward is from P2 perspective:
-        # +pot if P2 wins, -call_amount if P2 loses
-        call_amount = self.pot / 2  # since pot = sum of two all-ins + blinds
-
-        if self.active_player == self.winner:
-            reward = self.pot - self.committed[self.active_player]
+        if self.winner == self.POS_SB:
+            sb_reward = self.pot - self.committed[self.POS_SB]
+            bb_reward = -self.committed[self.POS_BB]
         else:
-            reward = -self.committed[self.active_player]
+            sb_reward = -self.committed[self.POS_SB]
+            bb_reward = self.pot - self.committed[self.POS_BB]
 
-        return reward
+        self.stacks[self.POS_SB] = 0        
+        self.stacks[self.POS_BB] = 0        
+        self.stacks[self.winner] = self.pot
 
-    # def _get_obs(self):
-    #     obs = {
-    #         "hand": self.hands[self.active_player].copy(),
-    #         "stack_bb": self.stacks[self.active_player],
-    #         "pot_bb": self.pot,
-    #         "sb_bb": self.sb_bb,
-    #         "bb_bb": self.bb_bb,
-    #         "position": self.active_player,
-    #     }
-    #     return obs
+        return sb_reward, bb_reward
 
     def _make_info(self):
+        """
+        Helper function to make dictionary of information on episode termination.
+
+        Parameters
+        ----------
+        nil
+        
+        Returns
+        -------
+        dict
+            Containing:
+            - terminal reason (str): description of reason for termination of hand
+            - winner (int): Position of winner of hand SB = 0, BB = 1 
+            - showdown (bool): Episode complete flag set to True at showdown or player folding
+        """
+        # print("terminal_reason", self.terminal_reason, " winner", self.winner)
         return {
             "terminal_reason": self.terminal_reason,
             "winner": self.winner,
@@ -208,6 +363,18 @@ class PushFoldEnv:
         }
 
     def _create_deck(self):
+        """
+        Helper function to create a 52 card deck.
+
+        Parameters
+        ----------
+        Nil
+
+        Returns
+        -------
+        list of str
+            Card strings representing the 52 card deck
+        """
         ranks = "23456789TJQKA"
         suits = "cdhs"  # clubs, diamonds, hearts, spades
         return [r + s for r in ranks for s in suits]
