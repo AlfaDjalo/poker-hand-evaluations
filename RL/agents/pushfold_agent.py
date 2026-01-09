@@ -38,7 +38,8 @@ class PushFoldAgent:
             training=False
         )
         logits = out["logits"]
-        return tf.nn.softmax(logits, axis=-1).numpy()[0]
+        return tf.nn.softmax(logits, axis=-1).numpy()
+        # return tf.nn.softmax(logits, axis=-1).numpy()[0]
     
     
     def policy_values(self, embedding):

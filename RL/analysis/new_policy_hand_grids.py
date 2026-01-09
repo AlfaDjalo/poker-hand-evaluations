@@ -26,6 +26,10 @@ SUITS = ["s", "h", "d", "c"]
 
 ACTION_ALLIN = 1  # index of ALLIN/CALL in logits
 
+# NEW: Stack normalization constants - MUST match training config
+STACK_MIN = 2.0
+STACK_MAX = 20.0
+
 
 # ---------- Load models ----------
 encoder = tf.keras.models.load_model(
@@ -76,12 +80,23 @@ def all_starting_hand_combos(rank1, rank2, suited):
     return cards
 
 
-def policy_prob_for_hand(hand, position, mode="probs"):
+# UPDATED: Add stack_bb parameter
+def policy_prob_for_hand(hand, position, stack_bb, mode="probs"):
+    # Get card embedding
+    card_embedding = encoder(
+        tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
+        training=False
+    )[0].numpy().flatten()
+    
+    # NEW: Normalize stack and append to embedding
+    normalized_stack = (stack_bb - STACK_MIN) / (STACK_MAX - STACK_MIN)
+    normalized_stack = np.clip(normalized_stack, 0.0, 1.0)
+    
+    # Combine card embedding with stack
+    full_embedding = np.concatenate([card_embedding, [normalized_stack]])
+    
     obs = {
-        "embedding": encoder(
-            tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
-            training=False
-        )[0].numpy()
+        "embedding": full_embedding
     }
 
     if position == 0:
@@ -95,76 +110,11 @@ def policy_prob_for_hand(hand, position, mode="probs"):
     else:
         return_val = agent.policy_values(obs["embedding"])[0]
 
-    # if position == 0:
-    #     probs = mode_function(obs["embedding"])[0]
-    #     # probs = sb_agent.policy_probs(obs["embedding"])[0]
-    # else:
-    #     # probs = bb_agent.policy_probs(obs["embedding"])[0]
-    # print(return_val)
     return return_val
-    # return float(probs[ACTION_ALLIN])
-
-# def policy_prob_for_hand(hand, position):
-#     obs = {
-#         "embedding": encoder(
-#             tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
-#             training=False
-#         )[0].numpy()
-#     }
-
-#     if position == 0:
-#         out = sb_agent.policy(
-#             tf.expand_dims(obs["embedding"], axis=0),
-#             training=False
-#         )
-#     else:
-#         out = bb_agent.policy(
-#             tf.expand_dims(obs["embedding"], axis=0),
-#             training=False
-#         )
-
-#     logits = out["logits"]
-#     probs = tf.nn.softmax(logits, axis=-1).numpy()[0][0]
-#     print("Probs: ", probs)
-
-#     return float(probs[ACTION_ALLIN])
 
 
-def policy_prob_for_hand_old(hand, position):
-    obs = {
-        "hand": hand,
-        # "position": position,
-        "embedding": encoder(
-            tf.expand_dims(cards_to_tensor(hand, "hand"), axis=0),
-            training=False
-        )[0].numpy()
-    }
-
-    # Use the full action-probability array (shape (2,)), do not take [0] here.
-    if position == 0:
-        probs = sb_agent.action_probs(obs)[0]
-    else:
-        probs = bb_agent.action_probs(obs)[0]
-
-    # Sanity check: expect two actions (fold, all-in)
-    assert hasattr(probs, "__len__") and len(probs) == 2, f"Expected probs length 2, got {probs}"
-
-    return float(probs[ACTION_ALLIN])
-
-
-# def policy_prob_for_hand(hand, position):
-#     tensor = cards_to_tensor(hand, mode="hand")
-#     emb = encoder(tf.expand_dims(tensor, axis=0), training=False)[0]
-#     logits = policy(tf.expand_dims(emb, axis=0), training=False)
-#     probs = tf.nn.softmax(logits, axis=-1).numpy()[0]
-#     prob = probs[0]
-#     print("Hand: ", hand, " Prob: ", prob)
-#     return prob
-#     # return probs[ACTION_PUSH_CALL]
-
-
-# ---------- Grid generation ----------
-def generate_policy_grid(position, mode="probs"):
+# UPDATED: Add stack_bb parameter
+def generate_policy_grid(position, stack_bb, mode="probs"):
     grid = np.zeros((13, 13), dtype=np.float32)
 
     for i, r1 in enumerate(RANKS):
@@ -176,7 +126,7 @@ def generate_policy_grid(position, mode="probs"):
             else:
                 combos = all_starting_hand_combos(r1, r2, suited=False)
 
-            probs = [policy_prob_for_hand(hand, position, mode) for hand in combos]
+            probs = [policy_prob_for_hand(hand, position, stack_bb, mode) for hand in combos]
             grid[i, j] = np.mean(probs)
 
     return grid
@@ -199,21 +149,23 @@ def plot_heatmap(grid, title, filename):
 
 # ---------- Main ----------
 if __name__ == "__main__":
-    print("Generating SB push grid...")
-    # sb_grid = generate_policy_grid(position=0, mode="values")
-    sb_grid = generate_policy_grid(position=0, mode="probs")
-    plot_heatmap(
-        sb_grid,
-        "SB Push Probability",
-        "sb_push_policy_heatmap.png"
-    )
+    # stack_size = 2
 
-    print("Generating BB call grid...")
-    bb_grid = generate_policy_grid(position=1, mode="probs")
-    plot_heatmap(
-        bb_grid,
-        "BB Call Probability",
-        "bb_call_policy_heatmap.png"
-    )
+    for stack_size in range(5, 20, 5):
+        print(f"Generating SB push grid at {stack_size}bb...")
+        sb_grid = generate_policy_grid(position=0, stack_bb=stack_size, mode="probs")
+        plot_heatmap(
+            sb_grid,
+            f"SB Push Probability at {stack_size}bb",
+            f"sb_push_policy_heatmap_{stack_size}bb.png"
+        )
 
-    print("Heatmaps saved to RL/analysis/")
+        print(f"Generating BB call grid at {stack_size}bb...")
+        bb_grid = generate_policy_grid(position=1, stack_bb=stack_size, mode="probs")
+        plot_heatmap(
+            bb_grid,
+            f"BB Call Probability at {stack_size}bb",
+            f"bb_call_policy_heatmap_{stack_size}bb.png"
+        )
+
+    print(f"Heatmaps saved to RL/analysis/")

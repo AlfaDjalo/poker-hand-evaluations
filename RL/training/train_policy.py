@@ -10,23 +10,6 @@ from RL.agents.all_in_agent import AllInAgent
 sb_model_path = "models/saved/policies/push_fold_policy_sb.keras"
 bb_model_path = "models/saved/policies/push_fold_policy_bb.keras"
 
-# Simple policy gradient loss
-def compute_loss_old(logits, actions, rewards, entropy_coef=0.01):
-    # Policy loss
-    neg_log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=actions,
-        logits=logits
-    )
-    policy_loss = tf.reduce_mean(neg_log_prob * rewards)
-
-    # Entropy bonus
-    probs = tf.nn.softmax(logits)
-    entropy = -tf.reduce_mean(tf.reduce_sum(probs * tf.math.log(probs + 1e-8), axis=1))
-
-    # Total loss
-    loss = policy_loss - entropy_coef * entropy
-    return loss
-
 
 def compute_loss(logits, values, actions, rewards,
                  value_coef=0.5, entropy_coef=0.01):
@@ -73,31 +56,18 @@ def train_step(policy, optimizer, observations, actions, rewards):
     return loss, policy_loss, value_loss
 
 
-# @tf.function
-def train_step_old(policy, optimizer, observations, actions, rewards):
-    with tf.GradientTape() as tape:
-        logits = policy(observations, training=True)
-        loss = compute_loss(logits, actions, rewards)
-    grads = tape.gradient(loss, policy.trainable_variables)
-    optimizer.apply_gradients(zip(grads, policy.trainable_variables))
-    return loss
-
-
 def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=False):
-
-
-    # sb_loss = tf.constant(0.0)
-    # sb_policy_loss = tf.constant(0.0)
-    # sb_value_loss = tf.constant(0.0)
 
     start_time = time.time()
 
     env = PushFoldEnv({
         "sb": 0.5,
         "bb": 1.0,
-        "stack_bb": 10,
-        "allow_variable_stack": False
+        "stack_bb": (2, 20),
+        # "allow_variable_stack": False
     })
+
+    # Normalisation_Stack = env.stack_bb
 
     if load_sb_model == True:
         sb_policy = tf.keras.models.load_model(
@@ -118,34 +88,36 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
         bb_policy = PushFoldPolicy(num_actions=2)
 
     sb_agent = PushFoldAgent(sb_policy)
-    # bb_agent = PushFoldAgent(bb_policy)
-    bb_agent = AllInAgent()
+    bb_agent = PushFoldAgent(bb_policy)
+    # bb_agent = AllInAgent()
 
     sb_optimizer = tf.keras.optimizers.Adam(1e-4)
     bb_optimizer = tf.keras.optimizers.Adam(1e-4)
 
-    batch_obs = []
-    batch_actions = []
-    batch_rewards = []
+    sb_batch_obs = []
+    sb_batch_actions = []
+    sb_batch_rewards = []
+
+    bb_batch_obs = []
+    bb_batch_actions = []
+    bb_batch_rewards = []
 
     for episode in range(num_episodes):
         obs = env.reset()
         done = False
 
+        initial_stack = obs['initial_stack_bb']
+
         # ---------- SB acts ----------
         sb_obs = obs["embedding"]
         sb_action = sb_agent.act(obs)
 
-        sb_transition = (sb_obs, sb_action)
+        # sb_transition = (sb_obs, sb_action)
 
         obs, reward, done, info = env.step(sb_action)
 
         # Get SB's actual reward
         sb_reward = info.get('sb_reward', 0.0)
-
-        batch_obs.append(sb_obs)
-        batch_actions.append(sb_action)
-        batch_rewards.append(sb_reward)
 
         # ---------- BB may act ----------
         bb_obs = None
@@ -155,9 +127,23 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
             bb_obs = obs["embedding"]
             bb_action = bb_agent.act(obs)
             obs, reward, done, info = env.step(bb_action)
-            sb_reward = info['sb_reward']  # Update with final reward
+            sb_reward = info['sb_reward']
+            bb_reward = info['bb_reward']
+
+            bb_reward /= initial_stack
+
+            bb_batch_obs.append(bb_obs)
+            bb_batch_actions.append(bb_action)
+            bb_batch_rewards.append(bb_reward)
+
         else:
             info = {"winner": env.POS_BB}
+
+        sb_reward /= initial_stack
+
+        sb_batch_obs.append(sb_obs)
+        sb_batch_actions.append(sb_action)
+        sb_batch_rewards.append(sb_reward)
 
         # sb_reward = reward
 
@@ -176,17 +162,26 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
         # bb_reward = bb_reward / env.stack_bb
         
         # ---------- train SB ----------
-        if len(batch_obs) >= batch_size:
-            obs_tensor = tf.convert_to_tensor(batch_obs, dtype=tf.float32)
-            actions_tensor = tf.convert_to_tensor(batch_actions, dtype=tf.int32)
-            rewards_tensor = tf.convert_to_tensor(batch_rewards, dtype=tf.float32)
+        if len(sb_batch_obs) >= batch_size and len(bb_batch_obs) >= 0:
+            sb_obs_tensor = tf.convert_to_tensor(sb_batch_obs, dtype=tf.float32)
+            sb_actions_tensor = tf.convert_to_tensor(sb_batch_actions, dtype=tf.int32)
+            sb_rewards_tensor = tf.convert_to_tensor(sb_batch_rewards, dtype=tf.float32)
             
-            sb_loss, sb_policy_loss, sb_value_loss = train_step(sb_policy, sb_optimizer, obs_tensor, actions_tensor, rewards_tensor)
+            bb_obs_tensor = tf.convert_to_tensor(bb_batch_obs, dtype=tf.float32)
+            bb_actions_tensor = tf.convert_to_tensor(bb_batch_actions, dtype=tf.int32)
+            bb_rewards_tensor = tf.convert_to_tensor(bb_batch_rewards, dtype=tf.float32)
+
+            sb_loss, sb_policy_loss, sb_value_loss = train_step(sb_policy, sb_optimizer, sb_obs_tensor, sb_actions_tensor, sb_rewards_tensor)
+            bb_loss, bb_policy_loss, bb_value_loss = train_step(bb_policy, bb_optimizer, bb_obs_tensor, bb_actions_tensor, bb_rewards_tensor)
 
             # Clear batches
-            batch_obs.clear()
-            batch_actions.clear()
-            batch_rewards.clear()
+            sb_batch_obs.clear()
+            sb_batch_actions.clear()
+            sb_batch_rewards.clear()
+
+            bb_batch_obs.clear()
+            bb_batch_actions.clear()
+            bb_batch_rewards.clear()
 
         # sb_loss, sb_policy_loss, sb_value_loss = train_step(
         #     sb_policy,
@@ -208,13 +203,21 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
         # else:
         #     bb_loss = None
 
-        if episode % 50 == 0 and episode > batch_size:
+        if episode % 100 == 0 and episode > batch_size:
         # if episode % 50 == 0:
             print(
                 f"Ep {episode:4d} | "
+                f"Stack size {initial_stack: .2f} | "
                 f"SB total {sb_loss.numpy(): .4f} | "
                 f"policy {sb_policy_loss.numpy(): .4f} | "
                 f"value {sb_value_loss.numpy(): .4f}"
+            )
+            print(
+                f"Ep {episode:4d} | "
+                f"Stack size {initial_stack: .2f} | "
+                f"BB total {bb_loss.numpy(): .4f} | "
+                f"policy {bb_policy_loss.numpy(): .4f} | "
+                f"value {bb_value_loss.numpy(): .4f}"
             )
 
         # if episode % 100 == 0:
@@ -226,7 +229,7 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
         #     )
 
     sb_policy.save(sb_model_path)
-    # bb_policy.save(bb_model_path)
+    bb_policy.save(bb_model_path)
 
     print("Models saved to models/saved/policies/push_fold_policy_[pos].keras")
 
@@ -236,4 +239,4 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
 
 
 if __name__ == "__main__":
-    main(30000, load_sb_model=True, load_bb_model=False)
+    main(30000, load_sb_model=True, load_bb_model=True)

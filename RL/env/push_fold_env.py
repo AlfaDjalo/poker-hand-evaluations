@@ -42,13 +42,24 @@ class PushFoldEnv:
             Environment configuration parameters, including:
             - sb (float): Small blind in bb
             - bb (float): Big blind in bb
-            - stack (float): Effective stack in bb
-            - allow_variable_stack (bool): Flag to allow variable stacks, currently unused.
+        - stack_bb (float or tuple): If float, fixed stack. If tuple (min, max), variable stacks
+        - Both players always get the same stack size
         """
         self.sb_bb = config.get("sb", 0.5)
         self.bb_bb = config.get("bb", 1.0)
-        self.stack_bb = config.get("stack_bb", 10)  # fixed stack for now
-        self.allow_variable_stack = config.get("allow_variable_stack", False)
+
+        stack_config = config.get("stack_bb", 10)
+
+        if isinstance(stack_config, tuple) and len(stack_config) == 2:
+            self.stack_bb_min, self.stack_bb_max = stack_config
+            self.allow_variable_stack = True
+        else:
+            self.stack_bb_min = float(stack_config)
+            self.stack_bb_max = float(stack_config)
+            self.allow_variable_stack = False
+
+        # self.stack_bb = config.get("stack_bb", 10)  # fixed stack for now
+        # self.allow_variable_stack = config.get("allow_variable_stack", False)
 
         self.rng = random.Random()
         self.done = True  # enforce reset before step
@@ -56,6 +67,7 @@ class PushFoldEnv:
         # Internal state placeholders
         self.deck = []
         self.stacks = [0.0, 0.0]
+        self.initial_stack = 0.0
         self.committed = [0.0, 0.0]
         self.pot = 0.0
         self.hands = [None, None]
@@ -65,24 +77,47 @@ class PushFoldEnv:
         self.showdown_occurred = False
 
         self.encoder = tf.keras.models.load_model(encoder_path, custom_objects=get_custom_objects(), compile=False)
-        # self.encoder.summary()
-        # self.embedding_mode = "hand"
 
-    def _get_embedding(self, hand_cards):
+    def _get_embedding(self, hand_cards, stack_bb):
+        """
+        Create embedding combining hand cards and stack size
+        
+        Parameters
+        ----------
+        hand_cards : list
+            The player's hole cards
+        stack_bb : float
+            The starting stack size in BB (before blinds)
+            
+        Returns
+        -------
+        numpy.ndarray
+            Combined embedding: [card_embedding, normalized_stack]
+            Stack is normalized to [0, 1] where 0 = min_stack, 1 = max_stack
+        """      
         tensor_input = cards_to_tensor(hand_cards, mode="hand")
         tensor_batch = tf.expand_dims(tensor_input, axis=0)
-        embedding = self.encoder(tensor_batch, training=False)[0].numpy()
-        return embedding.flatten()
+        card_embedding = self.encoder(tensor_batch, training=False)[0].numpy().flatten()
+
+        normalized_stack = (stack_bb - self.stack_bb_min) / (self.stack_bb_max - self.stack_bb_min)
+        normalized_stack = np.clip(normalized_stack, 0.0, 1.0)
+
+        full_embedding = np.concatenate([card_embedding, [normalized_stack]])
+        
+        return full_embedding
+
 
     def _get_obs(self):
+        """
+        Get observation for the active player
+        """
         obs = {
-           "hand": self.hands[self.active_player].copy(),
-           "stack_bb": self.stacks[self.active_player],
-           "pot_bb": self.pot,
-        #    "sb_bb": self.sb_bb,
-        #    "bb_bb": self.bb_bb,
-           "position": self.active_player,
-           "embedding": self._get_embedding(self.hands[self.active_player]),
+            "hand": self.hands[self.active_player].copy(),
+            "stack_bb": self.stacks[self.active_player],
+            "initial_stack_bb": self.initial_stack,
+            "pot_bb": self.pot,
+            "position": self.active_player,
+            "embedding": self._get_embedding(self.hands[self.active_player], self.initial_stack),
         }
         return obs
 
@@ -113,13 +148,13 @@ class PushFoldEnv:
             self.rng.seed()
 
         # Setup stacks
-        if self.allow_variable_stack and isinstance(self.stack_bb, tuple):
-            self.stacks = [
-                self.rng.uniform(self.stack_bb[0], self.stack_bb[1]),
-                self.rng.uniform(self.stack_bb[0], self.stack_bb[1]),
-            ]
+        if self.allow_variable_stack:
+            stack_size = self.rng.uniform(self.stack_bb_min, self.stack_bb_max)
         else:
-            self.stacks = [self.stack_bb, self.stack_bb]
+            stack_size = self.stack_bb_min
+
+        self.initial_stack = stack_size  # Store for reward normalization
+        self.stacks = [stack_size, stack_size]
 
         self.pot = 0.0
         self.done = False
@@ -280,51 +315,12 @@ class PushFoldEnv:
         board = [self.deck.pop() for _ in range(5)]
         
         # Use C++ evaluator - returns 0 if SB wins, 1 if BB wins
-        winner_index = cpp_evaluate_showdown(
+        self.winner = cpp_evaluate_showdown(
             self.hands[self.POS_SB],
             self.hands[self.POS_BB],
             board,
             debug=False
         )
-        
-        self.winner = winner_index
-
-        if self.winner == self.POS_SB:
-            sb_reward = self.pot - self.committed[self.POS_SB]
-            bb_reward = -self.committed[self.POS_BB]
-        else:
-            sb_reward = -self.committed[self.POS_SB]
-            bb_reward = self.pot - self.committed[self.POS_BB]
-
-        self.stacks[self.POS_SB] = 0        
-        self.stacks[self.POS_BB] = 0        
-        self.stacks[self.winner] = self.pot
-
-        return sb_reward, bb_reward
-
-
-    def _resolve_showdown_old(self):
-        """
-        Resolve showdown when SB action = Push and BB action = Call
-
-        Parameters
-        ----------
-        Nil
-
-        Returns
-        -------
-        reward
-            
-        """
-        # Placeholder showdown logic:
-        # Randomly pick a winner (0 or 1)
-        board = [self.deck.pop() for _ in range(5)]
-        # print("Board: ", board)
-        SB_hand_rank = evaluate_hand(self.hands[self.POS_SB], board)
-        BB_hand_rank = evaluate_hand(self.hands[self.POS_BB], board)
-        # winner = evaluate_showdown(sb_hand, bb_hand, board)
-
-        self.winner = self.POS_SB if SB_hand_rank < BB_hand_rank else self.POS_BB
 
         if self.winner == self.POS_SB:
             sb_reward = self.pot - self.committed[self.POS_SB]
