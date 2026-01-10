@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import React from 'react';
 import PokerHandAnalyzer from './PokerHandAnalyzer';
+import PushFoldGrid from './components/PushFoldGrid';
 import EquityCalculator from './components/EquityCalculator';
 import CardSelector from './components/CardSelector';
 import ViewEmbeddings from './components/ViewEmbeddings';
@@ -33,6 +34,16 @@ function App() {
               element={
                 <div>
                   <PokerHandAnalyzer />
+                </div>
+              }
+            />
+
+            {/* Push-Fold Grid */}
+            <Route
+              path="/pushfold_grid"
+              element={
+                <div>
+                  <PushFoldGrid />
                 </div>
               }
             />

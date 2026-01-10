@@ -151,7 +151,7 @@ def plot_heatmap(grid, title, filename):
 if __name__ == "__main__":
     # stack_size = 2
 
-    for stack_size in range(5, 20, 5):
+    for stack_size in range(5, 25, 5):
         print(f"Generating SB push grid at {stack_size}bb...")
         sb_grid = generate_policy_grid(position=0, stack_bb=stack_size, mode="probs")
         plot_heatmap(

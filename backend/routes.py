@@ -229,6 +229,51 @@ def setup_api_routes(app):
             return {"error": str(e)}
 
 
+    @app.get("/pushfold/grid")
+    async def get_pushfold_grid(
+        stack_bb: float = 10.0,
+        position: str = "sb",
+        mode: str = "probs"
+    ):
+        """
+        Generate push-fold grid data for a specific stack size and position.
+        
+        Query params:
+            - stack_bb: float (default 10)
+            - position: str "sb" or "bb" (default "sb")
+            - mode: str "probs" or "values" (default "probs")
+        
+        Returns:
+            JSON with:
+            - grid: 13x13 array of probabilities/values
+            - combos: detailed combo breakdown for each cell
+        """
+        try:
+            position = position.lower()
+            mode = mode.lower()
+            
+            if position not in ['sb', 'bb']:
+                return {"error": "position must be 'sb' or 'bb'"}
+            
+            if mode not in ['probs', 'values']:
+                return {"error": "mode must be 'probs' or 'values'"}
+            
+            logger.info(f"Generating push-fold grid: stack={stack_bb}bb, position={position}, mode={mode}")
+            
+            # Import here to avoid circular dependencies
+            from RL.analysis.pushfold_grid_generator import generate_pushfold_grid_data
+            
+            result = generate_pushfold_grid_data(stack_bb, position, mode)
+            
+            return result  # FastAPI automatically converts to JSON
+            
+        except Exception as e:
+            logger.error(f"Error generating push-fold grid: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"error": str(e)}
+        
+
     def normalize_card(card: str) -> str:
         """Normalize a single card string.
 

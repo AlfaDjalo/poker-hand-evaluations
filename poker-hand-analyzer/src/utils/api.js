@@ -60,6 +60,28 @@ export async function loadEmbeddings({ hands, mode }) {
     return data;
 }
 
+export async function fetchPushFoldGrid({ stackBB, position, mode }) {
+    console.log("Fetching push-fold grid:", { stackBB, position, mode });
+    
+    const response = await fetch(
+        `${API_URL}/pushfold/grid?stack_bb=${stackBB}&position=${position}&mode=${mode}`,
+        {
+            method: "GET",
+            headers: { "Content-Type": "application/json" }
+        }
+    );
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Push-fold grid error:", errorText);
+        throw new Error(`Failed to fetch push-fold grid: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Push-fold grid data received:", data);
+    return data;
+}
+
 function normalizeCardValue(c) {
   return typeof c === "string" ? c : c?.card;
 }

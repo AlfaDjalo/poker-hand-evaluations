@@ -203,7 +203,7 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
         # else:
         #     bb_loss = None
 
-        if episode % 100 == 0 and episode > batch_size:
+        if episode % 1000 == 0 and episode > batch_size:
         # if episode % 50 == 0:
             print(
                 f"Ep {episode:4d} | "
@@ -231,7 +231,7 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
     sb_policy.save(sb_model_path)
     bb_policy.save(bb_model_path)
 
-    print("Models saved to models/saved/policies/push_fold_policy_[pos].keras")
+    # print("Models saved to models/saved/policies/push_fold_policy_[pos].keras")
 
     end_time = time.time()
 
@@ -239,4 +239,4 @@ def main(num_episodes=200, batch_size=64, load_sb_model=False, load_bb_model=Fal
 
 
 if __name__ == "__main__":
-    main(30000, load_sb_model=True, load_bb_model=True)
+    main(100000, load_sb_model=True, load_bb_model=True)

@@ -47,6 +47,17 @@ export const Navbar = ( {menuOpen, setMenuOpen} ) => {
                         </NavLink>
 
                         <NavLink
+                            to="/pushfold_grid"
+                            className={({ isActive }) =>
+                                isActive
+                                ? "text-white font-semibold"
+                                : "text-gray-300 hover:text-white transition-colors"
+                            }
+                        >
+                            View Push-Fold Grids
+                        </NavLink>
+
+                        <NavLink
                             to="/view_embeddings"
                             className={({ isActive }) =>
                                 isActive
