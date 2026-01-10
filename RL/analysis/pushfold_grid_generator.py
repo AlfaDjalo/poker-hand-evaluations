@@ -100,6 +100,24 @@ def get_embedding_with_stack(hand, stack_bb):
     
     return full_embedding
 
+def policy_eval_for_hand(hand, position, stack_bb, mode="probs"):
+    embedding = get_embedding_with_stack(hand, stack_bb)
+    
+    if position in ('sb', 0):
+        agent = _sb_agent
+    else:
+        agent = _bb_agent
+
+    if mode == "probs":
+        probs = agent.policy_probs(embedding)[0]
+        return float(probs[ACTION_ALLIN])
+
+    elif mode == "values":
+        value = agent.policy_values(embedding)
+        return float(value.numpy()[0])
+
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
 
 def policy_prob_for_hand(hand, position, stack_bb):
     """Get push/call probability for a specific hand at a specific stack depth"""
@@ -118,8 +136,74 @@ def policy_prob_for_hand(hand, position, stack_bb):
 
     return float(probs[ACTION_ALLIN])
 
+def generate_pushfold_grid_data(stack_bb, position):
+    load_models()
+    
+    prob_grid = []
+    value_grid = []
+    combos = {}
 
-def generate_pushfold_grid_data(stack_bb, position, mode='probs'):
+    for i, r1 in enumerate(RANKS):
+        prob_row = []
+        value_row = []
+        for j, r2 in enumerate(RANKS):
+            if i == j:
+                hand_notation = r1 + r2
+                suited = False
+            elif i < j:
+                hand_notation = r1 + r2 + 's'
+                suited = True
+            else:
+                hand_notation = r2 + r1 + 'o'
+                suited = False
+            
+            if i == j:
+                hand_combos = all_starting_hand_combos(r1, r2, suited=False)
+            elif i < j:
+                hand_combos = all_starting_hand_combos(r1, r2, suited=True)
+            else:
+                hand_combos = all_starting_hand_combos(r1, r2, suited=False)
+            
+            combo_details = []
+            prob_values = []
+            value_values = []
+            
+            for combo in hand_combos:
+                prob = policy_eval_for_hand(combo, position, stack_bb, mode="probs")
+                val = policy_eval_for_hand(combo, position, stack_bb, mode="values")
+                combo_details.append({
+                    "cards": combo,
+                    "probability": prob,
+                    "value": val
+                })
+                prob_values.append(prob)
+                value_values.append(val)
+            
+            avg_prob = np.mean(prob_values)
+            avg_val = np.mean(value_values)
+            
+            prob_row.append(avg_prob)
+            value_row.append(avg_val)
+            
+            combos[hand_notation] = {
+                "combos": combo_details,
+                "average_prob": avg_prob,
+                "average_value": avg_val,
+                "count": len(combo_details)
+            }
+        
+        prob_grid.append(prob_row)
+        value_grid.append(value_row)
+    
+    return {
+        "prob_grid": prob_grid,
+        "value_grid": value_grid,
+        "combos": combos,
+        "stack_bb": stack_bb,
+        "position": position,
+    }
+
+def generate_pushfold_grid_data_old(stack_bb, position, mode='probs'):
     """
     Generate complete grid data including combo breakdowns
     
@@ -174,7 +258,8 @@ def generate_pushfold_grid_data(stack_bb, position, mode='probs'):
             # Calculate probability for each combo
             combo_details = []
             for combo in hand_combos:
-                prob = policy_prob_for_hand(combo, position, stack_bb)
+                prob = policy_eval_for_hand(combo, position, stack_bb, mode)
+                # prob = policy_prob_for_hand(combo, position, stack_bb)
                 combo_details.append({
                     'cards': combo,
                     'probability': prob

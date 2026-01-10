@@ -263,8 +263,9 @@ def setup_api_routes(app):
             # Import here to avoid circular dependencies
             from RL.analysis.pushfold_grid_generator import generate_pushfold_grid_data
             
-            result = generate_pushfold_grid_data(stack_bb, position, mode)
-            
+            # result = generate_pushfold_grid_data(stack_bb, position, mode)
+            result = generate_pushfold_grid_data(stack_bb, position)
+         
             return result  # FastAPI automatically converts to JSON
             
         except Exception as e:

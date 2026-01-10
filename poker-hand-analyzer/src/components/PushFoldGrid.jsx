@@ -59,7 +59,39 @@ const PushFoldGrid = () => {
     loadGridData();
   }, [stackSize, position, mode]);
 
-  const getHandStyle = (hand, row, col, probability) => {
+  const getHandStyle = (hand, row, col, value) => {
+    let backgroundColor;
+
+    if (mode === 'probs') {
+        // Probabilities (0 to 1 scale)
+        if (value >= 0.75) {
+        backgroundColor = '#16a34a'; // Dark green
+        } else if (value >= 0.5) {
+        backgroundColor = '#22c55e'; // Green
+        } else if (value >= 0.25) {
+        backgroundColor = '#eab308'; // Yellow
+        } else {
+        backgroundColor = '#dc2626'; // Red
+        }
+    } else if (mode === 'values') {
+        // Values (EV) - simple green for positive, red for negative
+        if (value > 0) {
+        backgroundColor = '#16a34a'; // Green
+        } else if (value < 0) {
+        backgroundColor = '#dc2626'; // Red
+        } else {
+        backgroundColor = '#eab308'; // Yellow-ish for zero or neutral
+        }
+    }
+
+    return {
+        backgroundColor,
+        opacity: selectedHand === hand ? 1.0 : 0.85,
+        border: selectedHand === hand ? '3px solid white' : 'none',
+    };
+    };
+
+  const getHandStyleOld = (hand, row, col, probability) => {
     // const isPair = row === col;
     // const isSuited = row < col;
     
@@ -82,10 +114,16 @@ const PushFoldGrid = () => {
     };
   };
 
-  const getCellProbability = (row, col) => {
-    if (!gridData || !gridData.grid) return 0;
-    return gridData.grid[row][col];
-  };
+    const getCellValue = (row, col) => {
+    if (!gridData) return 0;
+
+    if (mode === 'probs') {
+        return gridData.prob_grid?.[row]?.[col] ?? 0;
+    } else if (mode === 'values') {
+        return gridData.value_grid?.[row]?.[col] ?? 0;
+    }
+    return 0;
+    };
 
   const renderComboBreakdown = () => {
     if (!selectedHand || !gridData || !gridData.combos) {
@@ -112,39 +150,6 @@ const PushFoldGrid = () => {
         combos={handData.combos}
         mode={mode}
         />
-        {/* <h2 className="text-2xl font-bold mb-4">{selectedHand}</h2>
-        <p className="text-lg mb-4">
-          Average {mode === 'probs' ? 'Probability' : 'Value'}: {' '}
-          <span className="font-bold">
-            {(handData.average * 100).toFixed(1)}%
-          </span>
-        </p>
-        <p className="text-sm text-gray-600 mb-4">
-          {handData.count} combos
-        </p>
-
-        <div className="space-y-2">
-          <h3 className="font-semibold text-lg mb-2">Individual Combos:</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {handData.combos.map((combo, idx) => (
-              <div 
-                key={idx}
-                className="p-3 border rounded-lg bg-gray-50"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="font-mono font-semibold">
-                    {combo.cards.join(' ')}
-                  </span>
-                  <span className={`font-bold ${
-                    combo.probability >= 0.5 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {(combo.probability * 100).toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div> */}
       </div>
     );
   };
@@ -222,7 +227,7 @@ const PushFoldGrid = () => {
             </div>
           </div>
 
-          {/* Legend */}
+          {/* Legend
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-semibold mb-2">Color Legend:</h3>
             <div className="space-y-1 text-xs">
@@ -243,50 +248,55 @@ const PushFoldGrid = () => {
                 <span>0-25% (Fold)</span>
               </div>
             </div>
-          </div>
+          </div> */}
 
-          {selectedHand && (
+          {/* {selectedHand && (
             <div className="text-sm text-gray-600 mb-2">
               Selected: <span className="font-bold">{selectedHand}</span>
             </div>
-          )}
+          )} */}
         </div>
         
         {/* Hand Grid */}
         {loading ? (
-          <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64">
             <div className="text-gray-500">Loading grid...</div>
-          </div>
+        </div>
         ) : error ? (
-          <div className="flex items-center justify-center h-64">
+        <div className="flex items-center justify-center h-64">
             <div className="text-red-500">Error: {error}</div>
-          </div>
+        </div>
         ) : (
-          <div className="hand-grid">
-            {HAND_GRID.map((row, rowIdx) => 
-              row.map((hand, colIdx) => {
-                const probability = getCellProbability(rowIdx, colIdx);
+        <div className="hand-grid">
+            {HAND_GRID.map((row, rowIdx) =>
+            row.map((hand, colIdx) => {
+                const value = getCellValue(rowIdx, colIdx);
                 return (
-                  <div
+                <div
                     key={`${rowIdx}-${colIdx}`}
                     className={`hand-cell ${selectedHand === hand ? 'selected' : ''}`}
-                    style={getHandStyle(hand, rowIdx, colIdx, probability)}
+                    style={getHandStyle(hand, rowIdx, colIdx, value)}
                     onClick={() => setSelectedHand(hand)}
-                  >
+                >
                     <div className="font-bold text-sm">{hand}</div>
                     <div className="text-xs mt-1">
-                      {(probability * 100).toFixed(0)}%
+                    {mode === 'probs' ? `${(value * 100).toFixed(0)}%` : value.toFixed(2)}
                     </div>
-                  </div>
+                </div>
                 );
-              })
+            })
             )}
-          </div>
+        </div>
         )}
       </div>
 
       {/* Right Panel - Combo Breakdown */}
       <div className="right-panel">
+        {selectedHand && (
+        <div className="text-sm text-gray-600 mb-2">
+            Selected: <span className="font-bold">{selectedHand}</span>
+        </div>
+        )}
         <div className="chart-container">
           {renderComboBreakdown()}
         </div>

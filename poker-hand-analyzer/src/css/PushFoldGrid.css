@@ -7,6 +7,20 @@
 }
 
 .left-panel {
+  flex: 1;  /* Takes up remaining space proportionally */
+  min-width: 600px;  /* Minimum width to ensure grid fits */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.right-panel {
+  flex: 1;  /* Equal split with left panel */
+  overflow-y: auto;
+}
+/* 
+.left-panel {
   flex: 0 0 500px;
   display: flex;
   flex-direction: column;
@@ -17,7 +31,7 @@
 .right-panel {
   flex: 1;
   overflow-y: auto;
-}
+} */
 
 .hand-grid {
   display: grid;
